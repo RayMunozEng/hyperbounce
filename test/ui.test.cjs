@@ -1,4 +1,6 @@
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const test = require("node:test");
 const loadSourceModule = require("./load-source-module.cjs");
 
@@ -175,4 +177,14 @@ test("HUD updates run stats and toggles screens", () => {
 
   assert.equal(doc.elements["game-over"].textContent, "NEW HIGH SCORE");
   assert.equal(doc.elements["retry-btn"].classList.contains("hidden"), false);
+});
+
+test("combo HUD stat has a dedicated contrast treatment", () => {
+  const css = fs.readFileSync(path.join(__dirname, "..", "styling.css"), "utf8");
+  const accentRule = css.match(/\.hud-stat\.accent\s*\{[^}]+\}/);
+
+  assert.equal(Boolean(accentRule), true);
+  assert.match(accentRule[0], /border:/);
+  assert.match(accentRule[0], /background:/);
+  assert.match(accentRule[0], /box-shadow:/);
 });

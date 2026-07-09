@@ -198,6 +198,8 @@ test("platform landing feedback layers a softer afterglow behind the impact", ()
 
   assert.equal(platform.impactAfterglow.visible, true);
   assert.equal(platform.impactAfterglow.material.opacity < platform.shockwave.material.opacity, true);
+  assert.equal(platform.shockwave.material.opacity <= 0.14, true);
+  assert.equal(platform.impactAfterglow.material.opacity <= 0.04, true);
 
   platform.update(0.12, 0);
 

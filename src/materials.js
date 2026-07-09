@@ -1,5 +1,7 @@
 import { COLORS } from "./config";
 
+const PLATFORM_PAD_EMISSIVE_INTENSITY = 0.06;
+
 function standardMaterial(THREE, color, emissive = color, intensity = 0.7) {
     return new THREE.MeshStandardMaterial({
         color,
@@ -65,11 +67,11 @@ export function createSharedAssets(THREE) {
             })
         },
         platform: {
-            standard: standardMaterial(THREE, COLORS.slate, COLORS.cyanDark, 0.06),
-            multiplier: standardMaterial(THREE, COLORS.magentaPad, COLORS.magenta, 0.22),
-            hazard: standardMaterial(THREE, COLORS.redPad, COLORS.red, 0.24),
-            narrow: standardMaterial(THREE, COLORS.greenPad, COLORS.green, 0.2),
-            boost: standardMaterial(THREE, COLORS.goldPad, COLORS.gold, 0.22),
+            standard: standardMaterial(THREE, COLORS.slate, COLORS.cyanDark, PLATFORM_PAD_EMISSIVE_INTENSITY),
+            multiplier: standardMaterial(THREE, COLORS.magentaPad, COLORS.magenta, PLATFORM_PAD_EMISSIVE_INTENSITY),
+            hazard: standardMaterial(THREE, COLORS.redPad, COLORS.red, PLATFORM_PAD_EMISSIVE_INTENSITY),
+            narrow: standardMaterial(THREE, COLORS.greenPad, COLORS.green, PLATFORM_PAD_EMISSIVE_INTENSITY),
+            boost: standardMaterial(THREE, COLORS.goldPad, COLORS.gold, PLATFORM_PAD_EMISSIVE_INTENSITY),
             edge: basicGlowMaterial(THREE, COLORS.white, 0.2),
             beacon: basicGlowMaterial(THREE, COLORS.white, 0.045),
             pickup: basicGlowMaterial(THREE, COLORS.white, 0.82),

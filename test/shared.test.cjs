@@ -91,10 +91,12 @@ test("shared assets factory centralizes reusable geometries and materials", () =
 test("shared materials keep platforms below the player brightness", () => {
   const { createSharedAssets } = loadSourceModule("src/materials.js");
   const assets = createSharedAssets(makeFakeThree());
+  const platformPadTypes = ["standard", "multiplier", "hazard", "narrow", "boost"];
 
   assert.equal(assets.materials.player.core.options.emissiveIntensity > 1, true);
-  assert.equal(assets.materials.platform.standard.options.emissiveIntensity < 0.1, true);
-  assert.equal(assets.materials.platform.multiplier.options.emissiveIntensity < 0.5, true);
+  platformPadTypes.forEach((type) => {
+    assert.equal(assets.materials.platform[type].options.emissiveIntensity <= 0.08, true);
+  });
   assert.equal(assets.materials.platform.edge.opacity <= 0.22, true);
   assert.equal(assets.materials.platform.beacon.opacity <= 0.07, true);
 });

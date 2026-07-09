@@ -1,6 +1,12 @@
 import { COLORS, GAME_CONFIG, PLATFORM_TYPES } from "./config";
 import { createSharedAssets } from "./materials";
 
+const IMPACT_FEEDBACK_SECONDS = 0.38;
+const IMPACT_SHOCKWAVE_OPACITY = 0.12;
+const IMPACT_AFTERGLOW_OPACITY = 0.028;
+const DANGER_SHOCKWAVE_OPACITY = 0.17;
+const DANGER_AFTERGLOW_OPACITY = 0.045;
+
 function easeOutCubic(value) {
     return 1 - Math.pow(1 - value, 3);
 }
@@ -30,6 +36,8 @@ export default class Platform {
         this.radius = GAME_CONFIG.platform.baseRadius;
         this.pickupOffset = 0;
         this.feedbackTimer = 0;
+        this.shockwaveMaxOpacity = IMPACT_SHOCKWAVE_OPACITY;
+        this.afterglowMaxOpacity = IMPACT_AFTERGLOW_OPACITY;
         this.beaconPhase = 0;
 
         this.pad = new THREE.Mesh(
@@ -163,7 +171,7 @@ export default class Platform {
 
         if (this.feedbackTimer > 0) {
             this.feedbackTimer = Math.max(0, this.feedbackTimer - delta);
-            const progress = 1 - (this.feedbackTimer / 0.38);
+            const progress = 1 - (this.feedbackTimer / IMPACT_FEEDBACK_SECONDS);
             const eased = easeOutCubic(progress);
             const fade = 1 - progress;
             const primaryScale = 0.75 + eased * 2.25;
@@ -174,8 +182,8 @@ export default class Platform {
             this.edge.scale.set(compression + 0.03, compression + 0.03, compression + 0.03);
             this.shockwave.scale.set(primaryScale, primaryScale, primaryScale);
             this.impactAfterglow.scale.set(afterglowScale, afterglowScale, afterglowScale);
-            this.shockwave.material.opacity = Math.max(0, fade * 0.28);
-            this.impactAfterglow.material.opacity = Math.max(0, fade * fade * 0.1);
+            this.shockwave.material.opacity = Math.max(0, fade * this.shockwaveMaxOpacity);
+            this.impactAfterglow.material.opacity = Math.max(0, fade * fade * this.afterglowMaxOpacity);
             this.shockwave.visible = this.feedbackTimer > 0;
             this.impactAfterglow.visible = this.feedbackTimer > 0;
         } else {
@@ -189,13 +197,15 @@ export default class Platform {
         const impactColor = resetMultiplier ? COLORS.red : boost > 0 ? COLORS.gold : platformType.color;
 
         this.isCleared = true;
-        this.feedbackTimer = 0.38;
+        this.feedbackTimer = IMPACT_FEEDBACK_SECONDS;
+        this.shockwaveMaxOpacity = resetMultiplier ? DANGER_SHOCKWAVE_OPACITY : IMPACT_SHOCKWAVE_OPACITY;
+        this.afterglowMaxOpacity = resetMultiplier ? DANGER_AFTERGLOW_OPACITY : IMPACT_AFTERGLOW_OPACITY;
         setMaterialColor(this.shockwave.material, impactColor);
         setMaterialColor(this.impactAfterglow.material, impactColor);
         this.shockwave.visible = true;
         this.impactAfterglow.visible = true;
-        this.shockwave.material.opacity = resetMultiplier ? 0.4 : 0.28;
-        this.impactAfterglow.material.opacity = resetMultiplier ? 0.16 : 0.1;
+        this.shockwave.material.opacity = this.shockwaveMaxOpacity;
+        this.impactAfterglow.material.opacity = this.afterglowMaxOpacity;
         this.shockwave.scale.set(0.7, 0.7, 0.7);
         this.impactAfterglow.scale.set(1.05, 1.05, 1.05);
 
