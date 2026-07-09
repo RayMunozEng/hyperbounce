@@ -30,10 +30,17 @@
             </div>
         </section>
 
-        <section id="start-panel" class="start-panel">
+        <div id="combo-callouts" class="combo-callouts" aria-live="polite" aria-atomic="false"></div>
+        <div id="launch-countdown" class="launch-countdown hidden" aria-live="assertive" aria-atomic="true"></div>
+
+        <section id="start-panel" class="start-panel intro-panel">
+            <span class="panel-orbit" aria-hidden="true"></span>
             <p id="game-over" class="state-title hidden">GAME OVER</p>
-            <h1 id="title">HYPERBOUNCE</h1>
-            <p class="tagline">Neon Skill-Runner</p>
+            <h1 id="title" data-text="HYPERBOUNCE">
+                <span class="title-depth" aria-hidden="true"></span>
+                <span class="title-text">HYPERBOUNCE</span>
+                <span class="title-star" aria-hidden="true"></span>
+            </h1>
             <div id="directions-container" class="run-mantra">Land. Chain. Survive.</div>
             <div class="menu-actions">
                 <button id="start-btn" class="primary-action" type="button">Start Run</button>
@@ -42,9 +49,8 @@
         </section>
 
         <nav id="links" class="profile-links" aria-label="Profile links">
-            <a href="https://github.com/rmunoz1994">GitHub</a>
+            <a href="https://github.com/RayMunozEng">GitHub</a>
             <a href="https://www.linkedin.com/in/raymond-mu%C3%B1oz/">LinkedIn</a>
-            <a href="https://angel.co/raymond-munoz">AngelList</a>
         </nav>
 
         <button id="sound-btn" class="sound-toggle" type="button">

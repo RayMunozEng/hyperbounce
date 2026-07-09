@@ -35,9 +35,16 @@ export default class PlatformManager {
         this.spawnIndex = 0;
         this.lastX = 0;
 
-        for (let i = 0; i < GAME_CONFIG.platform.openingCount; i++) {
-            this.activatePlatform("standard", 0, i * GAME_CONFIG.platform.startZ);
+        let z = GAME_CONFIG.platform.landingZ;
+        while (this.shouldSeedOpeningRunway(z)) {
+            if (!this.activatePlatform("standard", 0, z)) break;
+            z += GAME_CONFIG.platform.startZ;
         }
+    }
+
+    shouldSeedOpeningRunway(nextZ) {
+        return this.active.length < GAME_CONFIG.platform.openingCount ||
+            nextZ >= GAME_CONFIG.platform.spawnZ;
     }
 
     current() {
@@ -62,6 +69,35 @@ export default class PlatformManager {
         return launchPad;
     }
 
+    setVisible(isVisible) {
+        this.active.forEach((platform) => {
+            if (typeof platform.setVisible === "function") {
+                platform.setVisible(isVisible);
+            } else {
+                platform.group.visible = isVisible;
+            }
+        });
+    }
+
+    startLaunchReveal() {
+        this.active
+            .slice()
+            .sort((left, right) => right.group.position.z - left.group.position.z)
+            .forEach((platform, index) => {
+                if (typeof platform.startLaunchReveal === "function") {
+                    platform.startLaunchReveal(index * GAME_CONFIG.launch.platformRevealStagger);
+                }
+            });
+    }
+
+    updateLaunchReveal(delta) {
+        this.active.forEach((platform) => {
+            if (typeof platform.updateLaunchReveal === "function") {
+                platform.updateLaunchReveal(delta);
+            }
+        });
+    }
+
     spawnNext(score) {
         const farthestZ = this.active.reduce((minZ, platform) => {
             return Math.min(minZ, platform.group.position.z);
@@ -69,16 +105,17 @@ export default class PlatformManager {
         const z = farthestZ + GAME_CONFIG.platform.startZ;
         const x = this.nextX(score);
         const type = this.chooseType(score);
+        const motion = this.resolveMotion(score);
 
-        return this.activatePlatform(type, x, z);
+        return this.activatePlatform(type, x, z, motion);
     }
 
-    activatePlatform(type, x, z) {
+    activatePlatform(type, x, z, motion = { enabled: false }) {
         const platform = this.pool.find((candidate) => !candidate.active);
 
         if (!platform) return null;
 
-        platform.activate(type, x, z, this.spawnIndex);
+        platform.activate(type, x, z, this.spawnIndex, motion);
         platform.isCleared = false;
         this.active.push(platform);
         this.spawnIndex += 1;
@@ -100,16 +137,38 @@ export default class PlatformManager {
         return "standard";
     }
 
+    resolveMotion(score) {
+        const start = GAME_CONFIG.platform.motionStartScore;
+        const full = GAME_CONFIG.platform.motionFullScore;
+
+        if (score < start) return { enabled: false };
+
+        const progress = clamp((score - start) / Math.max(1, full - start), 0, 1);
+        const chance = progress * GAME_CONFIG.platform.motionMaxChance;
+
+        if (this.random() > chance) return { enabled: false };
+
+        return {
+            enabled: true,
+            amplitude: GAME_CONFIG.platform.motionMinAmplitude +
+                ((GAME_CONFIG.platform.motionMaxAmplitude - GAME_CONFIG.platform.motionMinAmplitude) * progress),
+            speed: GAME_CONFIG.platform.motionMinSpeed +
+                ((GAME_CONFIG.platform.motionMaxSpeed - GAME_CONFIG.platform.motionMinSpeed) * progress),
+            phase: this.random() * Math.PI * 2
+        };
+    }
+
     nextX(score) {
-        const spread = score < 4 ? 4.8 : 6.8;
+        const progress = clamp((score - 4) / 42, 0, 1);
+        const spread = 4.8 + progress * 3;
         const drift = (this.random() - 0.5) * spread;
         return clamp(this.lastX + drift, -6.5, 6.5);
     }
 
-    update(delta, speed) {
+    update(delta, speed, beatPulse) {
         for (let i = this.active.length - 1; i >= 0; i--) {
             const platform = this.active[i];
-            platform.update(delta, speed);
+            platform.update(delta, speed, beatPulse);
 
             if (platform.group.position.z > GAME_CONFIG.platform.removeZ) {
                 platform.deactivate();

@@ -37,6 +37,11 @@ function makeFakeHowl(log) {
       log.calls.push(["volume", value]);
     }
 
+    rate(value) {
+      this.rateValue = value;
+      log.calls.push(["rate", value]);
+    }
+
     duration() {
       return 10;
     }
@@ -103,6 +108,7 @@ function readWavStats(filePath) {
 
   return {
     duration,
+    onset: segment(0.02, 0.12),
     body: segment(0.08, 0.24),
     tail: segment(Math.max(0, duration - 0.1), duration),
   };
@@ -162,6 +168,88 @@ test("crossfade music looper waits when duration is not loaded yet", () => {
   assert.equal(log.calls.some((call) => call[0] === "fade"), false);
 });
 
+test("crossfade music can start quietly and fade up to run volume", () => {
+  const { CrossfadeMusic } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+  const looper = new CrossfadeMusic({
+    HowlClass: makeFakeHowl(log),
+    src: ["song.wav"],
+    volume: 0.6,
+    fadeSeconds: 2,
+    setTimer() {},
+    clearTimer() {},
+  });
+
+  looper.play(0.14);
+
+  assert.deepEqual(log.calls.slice(0, 2), [["volume", 0.14], ["play", 0.14]]);
+
+  looper.fadeTo(0.6, 1.25);
+
+  assert.deepEqual(log.calls.slice(-1)[0], ["fade", 0.14, 0.6, 1250]);
+  assert.equal(looper.volume, 0.6);
+});
+
+test("crossfade music retries playback after browser audio unlocks", () => {
+  const { CrossfadeMusic } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+  class UnlockHowl extends makeFakeHowl(log) {
+    constructor(options) {
+      super(options);
+      this.unlockHandlers = [];
+    }
+
+    once(event, handler) {
+      log.calls.push(["once", event]);
+      this.unlockHandlers.push(handler);
+    }
+  }
+  const looper = new CrossfadeMusic({
+    HowlClass: UnlockHowl,
+    src: ["song.wav"],
+    volume: 0.6,
+    fadeSeconds: 2,
+    setTimer() {},
+    clearTimer() {},
+  });
+
+  looper.play(0.22);
+  log.instances[0].options.onplayerror.call(log.instances[0]);
+  log.instances[0].unlockHandlers[0]();
+
+  assert.deepEqual(log.calls.slice(-2), [["once", "unlock"], ["play", 0.22]]);
+});
+
+test("crossfade music can shift playback rate quickly for key changes", () => {
+  const { CrossfadeMusic } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+  const scheduled = [];
+  const looper = new CrossfadeMusic({
+    HowlClass: makeFakeHowl(log),
+    src: ["song.wav"],
+    volume: 0.6,
+    fadeSeconds: 2,
+    setTimer(fn, delay) {
+      scheduled.push({ fn, delay });
+      return scheduled.length;
+    },
+    clearTimer() {},
+  });
+
+  looper.shiftRate(0.88, 0.4);
+
+  assert.equal(scheduled[0].delay, 50);
+
+  for (let i = 0; i < scheduled.length; i += 1) {
+    scheduled[i].fn();
+  }
+
+  const rateCalls = log.calls.filter((call) => call[0] === "rate");
+  assert.equal(rateCalls.length, 16);
+  assert.equal(rateCalls[rateCalls.length - 1][1], 0.88);
+  assert.equal(looper.rate, 0.88);
+});
+
 test("jump SFX helper uses the neon jump asset at gameplay volume", () => {
   const { createJumpSfx } = loadSourceModule("src/audio.js");
   const log = { calls: [], instances: [] };
@@ -172,6 +260,142 @@ test("jump SFX helper uses the neon jump asset at gameplay volume", () => {
   assert.deepEqual(jump.options.src, ["./src/sounds/neon-jump.wav"]);
   assert.equal(jump.options.volume, 0.34);
   assert.equal(jump.options.rate, 1);
+});
+
+test("orb SFX helper maps collect and miss cues to distinct assets", () => {
+  const { createOrbSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const orb = createOrbSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 2);
+  assert.deepEqual(orb.collect.options.src, ["./src/sounds/orb-collect.wav"]);
+  assert.deepEqual(orb.miss.options.src, ["./src/sounds/orb-miss.wav"]);
+  assert.equal(orb.collect.options.volume > orb.miss.options.volume, true);
+  assert.equal(orb.miss.options.volume >= 0.28, true);
+
+  orb.mute(true);
+
+  assert.deepEqual(log.calls.slice(-2), [["mute", true], ["mute", true]]);
+});
+
+test("intro SFX helper maps the title sequence to distinct assets", () => {
+  const { createIntroSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const intro = createIntroSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 3);
+  assert.deepEqual(intro.zoom.options.src, ["./src/sounds/intro-zoom.wav"]);
+  assert.deepEqual(intro.wipe.options.src, ["./src/sounds/intro-wipe.wav"]);
+  assert.deepEqual(intro.star.options.src, ["./src/sounds/intro-star.wav"]);
+  assert.equal(intro.zoom.options.volume < intro.star.options.volume, true);
+  assert.equal(intro.wipe.options.volume < intro.star.options.volume, true);
+
+  intro.mute(true);
+
+  assert.deepEqual(log.calls.slice(-3), [
+    ["mute", true],
+    ["mute", true],
+    ["mute", true],
+  ]);
+});
+
+test("UI SFX helper maps hover cues to a subtle space asset", () => {
+  const { createUiSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const ui = createUiSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 1);
+  assert.deepEqual(ui.hover.options.src, ["./src/sounds/ui-hover.wav"]);
+  assert.equal(ui.hover.options.volume < 0.2, true);
+
+  ui.mute(true);
+
+  assert.deepEqual(log.calls.slice(-1), [["mute", true]]);
+});
+
+test("combo SFX helper maps multiplier milestones to an exciting cue", () => {
+  const { createComboSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const combo = createComboSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 1);
+  assert.deepEqual(combo.milestone.options.src, ["./src/sounds/combo-milestone.wav"]);
+  assert.equal(combo.milestone.options.volume >= 0.3, true);
+
+  combo.mute(true);
+
+  assert.deepEqual(log.calls.slice(-1), [["mute", true]]);
+});
+
+test("high score SFX helper maps fanfare to a distinct celebration cue", () => {
+  const { createHighScoreSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const highScore = createHighScoreSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 1);
+  assert.deepEqual(highScore.fanfare.options.src, ["./src/sounds/high-score-fanfare.wav"]);
+  assert.equal(highScore.fanfare.options.volume >= 0.36, true);
+
+  highScore.mute(true);
+
+  assert.deepEqual(log.calls.slice(-1), [["mute", true]]);
+});
+
+test("orb SFX assets are short and tonally distinct", () => {
+  const collect = readWavStats("src/sounds/orb-collect.wav");
+  const miss = readWavStats("src/sounds/orb-miss.wav");
+
+  assert.ok(collect.duration <= 0.34, "collect cue should be quick");
+  assert.ok(miss.duration <= 0.32, "miss cue should be quick");
+  assert.ok(collect.body.zeroCrossHz > 900, "collect should read as an upbeat chime");
+  assert.ok(collect.body.zeroCrossHz > miss.body.zeroCrossHz, "collect should read brighter than miss");
+  assert.ok(collect.tail.rms < collect.body.rms * 0.5, "collect should fade cleanly");
+  assert.ok(miss.tail.rms < miss.body.rms * 0.5, "miss should fade cleanly");
+});
+
+test("intro SFX assets are quick and staged from rush to sparkle", () => {
+  const zoom = readWavStats("src/sounds/intro-zoom.wav");
+  const wipe = readWavStats("src/sounds/intro-wipe.wav");
+  const star = readWavStats("src/sounds/intro-star.wav");
+
+  assert.ok(zoom.duration <= 1.1, "zoom cue should finish with the title rush");
+  assert.ok(wipe.duration <= 0.9, "wipe cue should stay tied to the shine");
+  assert.ok(star.duration <= 0.55, "star cue should be a short sparkle");
+  assert.ok(zoom.body.zeroCrossHz < wipe.body.zeroCrossHz, "zoom should read deeper than the wipe");
+  assert.ok(star.body.zeroCrossHz > wipe.body.zeroCrossHz, "star should read brightest");
+  assert.ok(star.tail.rms < star.body.rms * 0.5, "star should fade cleanly");
+});
+
+test("UI hover SFX asset is short, soft, and spacey", () => {
+  const hover = readWavStats("src/sounds/ui-hover.wav");
+
+  assert.ok(hover.duration <= 0.22, "hover cue should stay subtle");
+  assert.ok(hover.onset.peak < 0.7, "hover cue should avoid grabbing attention");
+  assert.ok(hover.onset.zeroCrossHz > 500, "hover cue should have a light synth shimmer");
+  assert.ok(hover.tail.rms < hover.onset.rms * 0.55, "hover cue should taper cleanly");
+});
+
+test("combo milestone SFX asset is bright, upbeat, and clean", () => {
+  const combo = readWavStats("src/sounds/combo-milestone.wav");
+
+  assert.ok(combo.duration <= 0.75, "combo cue should not cover gameplay");
+  assert.ok(combo.body.zeroCrossHz > 850, "combo cue should read as a bright reward");
+  assert.ok(combo.onset.peak < 0.95, "combo cue should avoid clipping");
+  assert.ok(combo.tail.rms < combo.body.rms * 0.45, "combo cue should taper cleanly");
+});
+
+test("high score fanfare SFX asset is celebratory and compact", () => {
+  const fanfare = readWavStats("src/sounds/high-score-fanfare.wav");
+
+  assert.ok(fanfare.duration <= 1.35, "fanfare should be short enough for retry flow");
+  assert.ok(fanfare.body.zeroCrossHz > 600, "fanfare should feel lifted");
+  assert.ok(fanfare.body.peak < 0.95, "fanfare should avoid clipping");
+  assert.ok(fanfare.tail.rms < fanfare.body.rms * 0.5, "fanfare should fade cleanly");
 });
 
 test("jump SFX asset has a deeper body and a gentle tail", () => {
