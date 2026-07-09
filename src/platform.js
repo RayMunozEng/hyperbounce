@@ -17,6 +17,7 @@ export default class Platform {
         this.radius = GAME_CONFIG.platform.baseRadius;
         this.pickupOffset = 0;
         this.feedbackTimer = 0;
+        this.beaconPhase = 0;
 
         this.pad = new THREE.Mesh(
             assets.geometries.platformPad,
@@ -27,6 +28,11 @@ export default class Platform {
             assets.materials.platform.edge
         );
         this.pickup = this.createPickup();
+        this.beaconMaterial = assets.materials.platform.beacon.clone();
+        this.beacon = new THREE.Mesh(
+            assets.geometries.platformBeacon,
+            this.beaconMaterial
+        );
         this.hazard = new THREE.Mesh(
             assets.geometries.hazardMarker,
             assets.materials.platform.hazardMarker
@@ -38,6 +44,7 @@ export default class Platform {
 
         this.edge.rotation.x = Math.PI / 2;
         this.pickup.position.y = 0.62;
+        this.beacon.position.y = 1.95;
         this.hazard.position.y = 0.58;
         this.shockwave.position.y = 0.23;
         this.shockwave.rotation.x = Math.PI / 2;
@@ -46,6 +53,7 @@ export default class Platform {
         this.group.add(this.pad);
         this.group.add(this.edge);
         this.group.add(this.pickup);
+        this.group.add(this.beacon);
         this.group.add(this.hazard);
         this.group.add(this.shockwave);
         this.group.position.y = GAME_CONFIG.platform.startY;
@@ -80,6 +88,7 @@ export default class Platform {
         this.radius = config.radius;
         this.pickupOffset = config.pickup ? ((index % 3) - 1) * 0.78 : 0;
         this.feedbackTimer = 0;
+        this.beaconPhase = index * 0.55;
         this.group.visible = true;
         this.group.position.set(x, GAME_CONFIG.platform.startY, z);
         this.pad.geometry = isNarrow ?
@@ -92,6 +101,13 @@ export default class Platform {
             this.assets.materials.platform.standard;
         this.pickup.visible = config.pickup;
         this.pickup.position.x = this.pickupOffset;
+        this.beacon.visible = true;
+        this.beaconMaterial.opacity = 0.2;
+        this.beacon.scale.set(
+            config.radius / GAME_CONFIG.platform.baseRadius,
+            1,
+            config.radius / GAME_CONFIG.platform.baseRadius
+        );
         this.hazard.visible = config.resetsMultiplier;
         this.shockwave.visible = false;
         this.shockwave.material.opacity = 0;
@@ -102,6 +118,7 @@ export default class Platform {
         this.active = false;
         this.group.visible = false;
         this.pickup.visible = false;
+        this.beacon.visible = false;
         this.hazard.visible = false;
         this.shockwave.visible = false;
     }
@@ -114,6 +131,8 @@ export default class Platform {
         this.edge.rotation.z += 0.018 * frameScale;
         this.pickup.rotation.y += 0.04 * frameScale;
         this.hazard.rotation.y -= 0.035 * frameScale;
+        this.beaconPhase += delta * 4.8;
+        this.beaconMaterial.opacity = 0.16 + (Math.sin(this.beaconPhase) + 1) * 0.05;
 
         if (this.feedbackTimer > 0) {
             this.feedbackTimer = Math.max(0, this.feedbackTimer - delta);

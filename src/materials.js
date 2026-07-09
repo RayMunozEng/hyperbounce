@@ -34,6 +34,7 @@ export function createSharedAssets(THREE) {
         platformNarrowPad: new THREE.CylinderBufferGeometry(1.35, 1.35, 0.36, 6),
         platformEdge: new THREE.TorusBufferGeometry(2, 0.035, 8, 6),
         platformNarrowEdge: new THREE.TorusBufferGeometry(1.35, 0.035, 8, 6),
+        platformBeacon: new THREE.CylinderBufferGeometry(0.045, 0.045, 3.2, 10, 1, true),
         hazardMarker: new THREE.DodecahedronBufferGeometry(0.24, 0),
         shockwave: new THREE.RingBufferGeometry(0.55, 1.55, 48)
     };
@@ -59,6 +60,7 @@ export function createSharedAssets(THREE) {
             narrow: standardMaterial(THREE, COLORS.green, COLORS.green, 0.72),
             boost: standardMaterial(THREE, COLORS.gold, COLORS.gold, 0.8),
             edge: basicGlowMaterial(THREE, COLORS.white, 0.82),
+            beacon: basicGlowMaterial(THREE, COLORS.white, 0.2),
             pickup: basicGlowMaterial(THREE, COLORS.white, 0.96),
             hazardMarker: basicGlowMaterial(THREE, COLORS.red, 0.9)
         },

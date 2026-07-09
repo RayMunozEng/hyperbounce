@@ -1,6 +1,7 @@
 import Player from "./player";
 import PlatformManager from "./platform_generator";
 import { Howl } from "howler";
+import { CrossfadeMusic } from "./audio";
 import { createSharedAssets } from "./materials";
 import { Starfield } from "./effects";
 import { didCollect, didLand } from "./collision";
@@ -46,11 +47,11 @@ export default class Game {
     }
 
     setupAudio() {
-        this.bgm = new Howl({
-            src: ["./src/sounds/space_love_attack.mp3"],
-            autoplay: false,
+        this.bgm = new CrossfadeMusic({
+            HowlClass: Howl,
+            src: ["./src/sounds/neon-runner.wav"],
             volume: 0.55,
-            loop: true
+            fadeSeconds: 4
         });
         this.bounceSFX = new Howl({
             src: ["./src/sounds/bounce_test02.wav"],
@@ -173,7 +174,6 @@ export default class Game {
         this.resetRun();
         this.state = UI_STATES.playing;
         this.input.start();
-        this.input.lock(this.canvas);
         this.hud.showPlaying({
             score: this.score,
             highScore: this.highScore,

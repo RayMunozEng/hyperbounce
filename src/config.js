@@ -29,19 +29,20 @@ export const GAME_CONFIG = {
     },
     platform: {
         startY: -3.55,
-        startZ: -10,
-        spawnZ: -22,
+        startZ: -8.6,
+        spawnZ: -18,
         removeZ: 10,
         poolSize: 12,
-        openingCount: 2,
+        openingCount: 3,
+        landingZ: 0,
         baseRadius: 2,
         narrowRadius: 1.35,
         pickupRadius: 0.58
     },
     run: {
-        baseSpeed: 0.3,
-        speedGain: 0.0014,
-        maxSpeed: 0.78,
+        baseSpeed: 0.255,
+        speedGain: 0.0012,
+        maxSpeed: 0.72,
         baseScore: 1,
         boostBonus: 5
     },

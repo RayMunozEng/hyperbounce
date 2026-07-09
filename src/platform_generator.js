@@ -34,19 +34,27 @@ export default class PlatformManager {
         this.active.length = 0;
         this.spawnIndex = 0;
         this.lastX = 0;
-        this.activatePlatform("standard", 0, 0);
-        this.activatePlatform("standard", 0, GAME_CONFIG.platform.startZ);
+
+        for (let i = 0; i < GAME_CONFIG.platform.openingCount; i++) {
+            this.activatePlatform("standard", 0, i * GAME_CONFIG.platform.startZ);
+        }
     }
 
     current() {
-        return this.active.find((platform) => !platform.isCleared);
+        return this.active
+            .filter((platform) => !platform.isCleared)
+            .sort((left, right) => {
+                const leftDistance = Math.abs(left.group.position.z - GAME_CONFIG.platform.landingZ);
+                const rightDistance = Math.abs(right.group.position.z - GAME_CONFIG.platform.landingZ);
+                return leftDistance - rightDistance;
+            })[0];
     }
 
     spawnNext(score) {
         const farthestZ = this.active.reduce((minZ, platform) => {
             return Math.min(minZ, platform.group.position.z);
         }, 0);
-        const z = Math.min(GAME_CONFIG.platform.spawnZ, farthestZ - 10);
+        const z = farthestZ + GAME_CONFIG.platform.startZ;
         const x = this.nextX(score);
         const type = this.chooseType(score);
 

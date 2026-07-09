@@ -24,7 +24,17 @@ export class InputController {
             canvas.mozRequestPointerLock ||
             canvas.webkitRequestPointerLock;
 
-        if (lock) lock.call(canvas);
+        try {
+            const result = lock ? lock.call(canvas) : null;
+
+            if (result && result.catch) {
+                result.catch((error) => {
+                    this.pointerLockError = error;
+                });
+            }
+        } catch (error) {
+            this.pointerLockError = error;
+        }
     }
 
     unlock() {

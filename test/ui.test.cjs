@@ -87,6 +87,41 @@ test("input controller locks and unlocks pointer control", () => {
   assert.equal(doc.exitPointerLockCalled, true);
 });
 
+test("input controller ignores pointer-lock failures", () => {
+  const { InputController } = loadSourceModule("src/input.js");
+  const doc = makeDocument([]);
+  const input = new InputController(doc);
+
+  assert.doesNotThrow(() => {
+    input.lock({
+      requestPointerLock() {
+        throw new Error("pointer lock unavailable");
+      },
+    });
+  });
+});
+
+test("input controller catches async pointer-lock rejection", () => {
+  const { InputController } = loadSourceModule("src/input.js");
+  const doc = makeDocument([]);
+  const input = new InputController(doc);
+  let catchCalled = false;
+
+  input.lock({
+    requestPointerLock() {
+      return {
+        catch(handler) {
+          catchCalled = true;
+          handler(new Error("pointer lock rejected"));
+        },
+      };
+    },
+  });
+
+  assert.equal(catchCalled, true);
+  assert.equal(input.pointerLockError.message, "pointer lock rejected");
+});
+
 test("HUD updates run stats and toggles screens", () => {
   const { Hud } = loadSourceModule("src/hud.js");
   const doc = makeDocument([
