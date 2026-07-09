@@ -50,6 +50,18 @@ export default class PlatformManager {
             })[0];
     }
 
+    releaseLaunchPad() {
+        const launchPad = this.active.find((platform) => {
+            return Math.abs(platform.group.position.z - GAME_CONFIG.platform.landingZ) < 0.001;
+        });
+
+        if (!launchPad) return null;
+
+        launchPad.deactivate();
+        this.active.splice(this.active.indexOf(launchPad), 1);
+        return launchPad;
+    }
+
     spawnNext(score) {
         const farthestZ = this.active.reduce((minZ, platform) => {
             return Math.min(minZ, platform.group.position.z);

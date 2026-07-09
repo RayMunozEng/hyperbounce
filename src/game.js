@@ -63,7 +63,7 @@ export default class Game {
     setupScene() {
         this.clock = new this.THREE.Clock();
         this.scene = new this.THREE.Scene();
-        this.scene2 = new this.THREE.Scene();
+        this.scene2 = this.scene;
         this.assets = createSharedAssets(this.THREE);
 
         this.camera = new this.THREE.PerspectiveCamera(
@@ -81,11 +81,10 @@ export default class Game {
         this.camera.layers.enable(1);
 
         this.addLighting(this.scene);
-        this.addLighting(this.scene2);
 
         this.player = new Player({
             THREE: this.THREE,
-            scene: this.scene2,
+            scene: this.scene,
             assets: this.assets
         });
         this.platformManager = new PlatformManager({
@@ -172,6 +171,7 @@ export default class Game {
         if (this.state === UI_STATES.playing) return;
 
         this.resetRun();
+        this.platformManager.releaseLaunchPad();
         this.state = UI_STATES.playing;
         this.input.start();
         this.hud.showPlaying({
@@ -304,9 +304,6 @@ export default class Game {
         } else {
             this.renderer.render(this.scene, this.camera);
         }
-
-        this.renderer.clearDepth();
-        this.renderer.render(this.scene2, this.camera);
     }
 
     onResize() {

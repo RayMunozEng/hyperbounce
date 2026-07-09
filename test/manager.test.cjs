@@ -88,6 +88,24 @@ test("platform manager keeps new pads one playable gap behind the farthest activ
   assert.equal(spawned.group.position.z, farthestZ + GAME_CONFIG.platform.startZ);
 });
 
+test("platform manager releases the start-screen launch pad before play", () => {
+  const { default: PlatformManager } = loadSourceModule("src/platform_generator.js");
+  const { GAME_CONFIG } = loadSourceModule("src/config.js");
+  const manager = new PlatformManager({
+    PlatformClass: FakePlatform,
+    random: () => 0.9,
+  });
+
+  manager.reset();
+  const launchPad = manager.current();
+
+  manager.releaseLaunchPad();
+
+  assert.equal(launchPad.active, false);
+  assert.equal(manager.active.includes(launchPad), false);
+  assert.equal(manager.current().group.position.z, GAME_CONFIG.platform.startZ);
+});
+
 test("platform manager targets the uncleared pad nearest the landing line", () => {
   const { default: PlatformManager } = loadSourceModule("src/platform_generator.js");
   const manager = new PlatformManager({

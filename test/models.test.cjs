@@ -132,6 +132,19 @@ test("player syncs bounce speed to the current run speed", () => {
   assert.equal(player.speed, resolveBounceSpeed(runSpeed));
 });
 
+test("player defaults to the primary game scene", () => {
+  const { default: Player } = loadSourceModule("src/player.js");
+  const THREE = makeFakeThree();
+  const scene = makeObject3D();
+  const previousWindow = global.window;
+
+  global.window = { game: { scene }, THREE };
+  new Player({ THREE, assets: makeAssets() });
+  global.window = previousWindow;
+
+  assert.equal(scene.children.length, 1);
+});
+
 test("platform activation configures type state and feedback", () => {
   const { default: Platform } = loadSourceModule("src/platform.js");
   const THREE = makeFakeThree();

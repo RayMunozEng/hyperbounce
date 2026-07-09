@@ -10,7 +10,7 @@ export default class Player {
     constructor(options = {}) {
         const browserWindow = typeof window === "undefined" ? {} : window;
         const THREE = options.THREE || browserWindow.THREE;
-        const scene = options.scene || (browserWindow.game && browserWindow.game.scene2);
+        const scene = options.scene || (browserWindow.game && browserWindow.game.scene);
         const assets = options.assets || createSharedAssets(THREE);
 
         this.THREE = THREE;
