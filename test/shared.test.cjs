@@ -88,6 +88,17 @@ test("shared assets factory centralizes reusable geometries and materials", () =
   assert.equal(typeof assets.createShockwaveMaterial, "function");
 });
 
+test("shared materials keep platforms below the player brightness", () => {
+  const { createSharedAssets } = loadSourceModule("src/materials.js");
+  const assets = createSharedAssets(makeFakeThree());
+
+  assert.equal(assets.materials.player.core.options.emissiveIntensity > 1, true);
+  assert.equal(assets.materials.platform.standard.options.emissiveIntensity < 0.1, true);
+  assert.equal(assets.materials.platform.multiplier.options.emissiveIntensity < 0.5, true);
+  assert.equal(assets.materials.platform.edge.opacity <= 0.22, true);
+  assert.equal(assets.materials.platform.beacon.opacity <= 0.07, true);
+});
+
 test("starfield moves forward and wraps past the camera", () => {
   const { Starfield } = loadSourceModule("src/effects.js");
   const scene = { added: [], add(object) { this.added.push(object); } };
@@ -103,6 +114,26 @@ test("starfield moves forward and wraps past the camera", () => {
 
   stars.update(1, 1);
 
-  assert.equal(scene.added.length, 1);
+  assert.equal(scene.added.length, 3);
   assert.equal(stars.geometry.vertices[0].z < 0, true);
+});
+
+test("starfield builds layered depth with rare glints", () => {
+  const { Starfield } = loadSourceModule("src/effects.js");
+  const scene = { added: [], add(object) { this.added.push(object); } };
+  const stars = new Starfield({
+    THREE: makeFakeThree(),
+    scene,
+    count: 12,
+    spread: 10,
+    depth: 10,
+    speedScale: 1,
+  });
+
+  assert.equal(stars.layers.length, 3);
+  assert.equal(scene.added.length, 3);
+  assert.equal(stars.layers[0].geometry.vertices.length, 12);
+  assert.equal(stars.layers[1].geometry.vertices.length, 4);
+  assert.equal(stars.layers[2].geometry.vertices.length, 1);
+  assert.equal(stars.layers[2].material.options.size > stars.layers[0].material.options.size, true);
 });

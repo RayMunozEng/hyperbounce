@@ -2,11 +2,18 @@ export const COLORS = {
     background: 0x040712,
     cyan: 0x00f5ff,
     cyanDark: 0x005d7a,
+    cyanPad: 0x063447,
     magenta: 0xff3df2,
+    magentaPad: 0x511a56,
     gold: 0xffc857,
+    goldPad: 0x61441e,
     red: 0xff355e,
+    redPad: 0x5b1f2d,
     green: 0x52ff9f,
+    greenPad: 0x1f5944,
     star: 0x99ddff,
+    starDim: 0x3f6f91,
+    starGlint: 0xdaf8ff,
     white: 0xffffff,
     slate: 0x15233f
 };

@@ -1,5 +1,18 @@
-import { GAME_CONFIG, PLATFORM_TYPES } from "./config";
+import { COLORS, GAME_CONFIG, PLATFORM_TYPES } from "./config";
 import { createSharedAssets } from "./materials";
+
+function easeOutCubic(value) {
+    return 1 - Math.pow(1 - value, 3);
+}
+
+function setMaterialColor(material, color) {
+    if (material.color && typeof material.color.setHex === "function") {
+        material.color.setHex(color);
+        return;
+    }
+
+    material.color = color;
+}
 
 export default class Platform {
     constructor(options = {}) {
@@ -41,6 +54,10 @@ export default class Platform {
             assets.geometries.shockwave,
             assets.createShockwaveMaterial()
         );
+        this.impactAfterglow = new THREE.Mesh(
+            assets.geometries.shockwave,
+            assets.createShockwaveMaterial(0.24, COLORS.star)
+        );
 
         this.edge.rotation.x = Math.PI / 2;
         this.pickup.position.y = 0.62;
@@ -49,12 +66,16 @@ export default class Platform {
         this.shockwave.position.y = 0.23;
         this.shockwave.rotation.x = Math.PI / 2;
         this.shockwave.visible = false;
+        this.impactAfterglow.position.y = 0.18;
+        this.impactAfterglow.rotation.x = Math.PI / 2;
+        this.impactAfterglow.visible = false;
 
         this.group.add(this.pad);
         this.group.add(this.edge);
         this.group.add(this.pickup);
         this.group.add(this.beacon);
         this.group.add(this.hazard);
+        this.group.add(this.impactAfterglow);
         this.group.add(this.shockwave);
         this.group.position.y = GAME_CONFIG.platform.startY;
         if (scene) scene.add(this.group);
@@ -102,16 +123,21 @@ export default class Platform {
         this.pickup.visible = config.pickup;
         this.pickup.position.x = this.pickupOffset;
         this.beacon.visible = true;
-        this.beaconMaterial.opacity = 0.2;
+        this.beaconMaterial.opacity = 0.045;
         this.beacon.scale.set(
             config.radius / GAME_CONFIG.platform.baseRadius,
-            1,
+            0.68,
             config.radius / GAME_CONFIG.platform.baseRadius
         );
         this.hazard.visible = config.resetsMultiplier;
         this.shockwave.visible = false;
         this.shockwave.material.opacity = 0;
+        this.impactAfterglow.visible = false;
+        this.impactAfterglow.material.opacity = 0;
         this.shockwave.scale.set(0.45, 0.45, 0.45);
+        this.impactAfterglow.scale.set(0.65, 0.65, 0.65);
+        this.pad.scale.set(1, 1, 1);
+        this.edge.scale.set(1, 1, 1);
     }
 
     deactivate() {
@@ -121,6 +147,7 @@ export default class Platform {
         this.beacon.visible = false;
         this.hazard.visible = false;
         this.shockwave.visible = false;
+        this.impactAfterglow.visible = false;
     }
 
     update(delta, speed) {
@@ -132,24 +159,45 @@ export default class Platform {
         this.pickup.rotation.y += 0.04 * frameScale;
         this.hazard.rotation.y -= 0.035 * frameScale;
         this.beaconPhase += delta * 4.8;
-        this.beaconMaterial.opacity = 0.16 + (Math.sin(this.beaconPhase) + 1) * 0.05;
+        this.beaconMaterial.opacity = 0.024 + (Math.sin(this.beaconPhase) + 1) * 0.009;
 
         if (this.feedbackTimer > 0) {
             this.feedbackTimer = Math.max(0, this.feedbackTimer - delta);
             const progress = 1 - (this.feedbackTimer / 0.38);
-            const scale = 0.7 + progress * 2.6;
-            this.shockwave.scale.set(scale, scale, scale);
-            this.shockwave.material.opacity = Math.max(0, 0.82 - progress);
+            const eased = easeOutCubic(progress);
+            const fade = 1 - progress;
+            const primaryScale = 0.75 + eased * 2.25;
+            const afterglowScale = 1.05 + eased * 3.15;
+            const compression = 1 + Math.sin(progress * Math.PI) * 0.045;
+
+            this.pad.scale.set(compression, 1, compression);
+            this.edge.scale.set(compression + 0.03, compression + 0.03, compression + 0.03);
+            this.shockwave.scale.set(primaryScale, primaryScale, primaryScale);
+            this.impactAfterglow.scale.set(afterglowScale, afterglowScale, afterglowScale);
+            this.shockwave.material.opacity = Math.max(0, fade * 0.28);
+            this.impactAfterglow.material.opacity = Math.max(0, fade * fade * 0.1);
             this.shockwave.visible = this.feedbackTimer > 0;
+            this.impactAfterglow.visible = this.feedbackTimer > 0;
+        } else {
+            this.pad.scale.set(1, 1, 1);
+            this.edge.scale.set(1, 1, 1);
         }
     }
 
     resolveLanding({ hitPickup, resetMultiplier, boost }) {
+        const platformType = PLATFORM_TYPES[this.type] || PLATFORM_TYPES.standard;
+        const impactColor = resetMultiplier ? COLORS.red : boost > 0 ? COLORS.gold : platformType.color;
+
         this.isCleared = true;
         this.feedbackTimer = 0.38;
+        setMaterialColor(this.shockwave.material, impactColor);
+        setMaterialColor(this.impactAfterglow.material, impactColor);
         this.shockwave.visible = true;
-        this.shockwave.material.opacity = resetMultiplier ? 0.95 : 0.82;
+        this.impactAfterglow.visible = true;
+        this.shockwave.material.opacity = resetMultiplier ? 0.4 : 0.28;
+        this.impactAfterglow.material.opacity = resetMultiplier ? 0.16 : 0.1;
         this.shockwave.scale.set(0.7, 0.7, 0.7);
+        this.impactAfterglow.scale.set(1.05, 1.05, 1.05);
 
         if (hitPickup) {
             this.pickup.visible = false;

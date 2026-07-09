@@ -21,6 +21,17 @@ function basicGlowMaterial(THREE, color, opacity = 1) {
     });
 }
 
+function starMaterial(THREE, color, size, opacity) {
+    return new THREE.PointsMaterial({
+        color,
+        size,
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+}
+
 export function createSharedAssets(THREE) {
     const hitTexture = new THREE.TextureLoader().load("src/images/circleGradient.png");
 
@@ -54,30 +65,28 @@ export function createSharedAssets(THREE) {
             })
         },
         platform: {
-            standard: standardMaterial(THREE, COLORS.cyanDark, COLORS.cyan, 0.55),
-            multiplier: standardMaterial(THREE, COLORS.magenta, COLORS.magenta, 0.8),
-            hazard: standardMaterial(THREE, COLORS.red, COLORS.red, 0.85),
-            narrow: standardMaterial(THREE, COLORS.green, COLORS.green, 0.72),
-            boost: standardMaterial(THREE, COLORS.gold, COLORS.gold, 0.8),
-            edge: basicGlowMaterial(THREE, COLORS.white, 0.82),
-            beacon: basicGlowMaterial(THREE, COLORS.white, 0.2),
-            pickup: basicGlowMaterial(THREE, COLORS.white, 0.96),
-            hazardMarker: basicGlowMaterial(THREE, COLORS.red, 0.9)
+            standard: standardMaterial(THREE, COLORS.slate, COLORS.cyanDark, 0.06),
+            multiplier: standardMaterial(THREE, COLORS.magentaPad, COLORS.magenta, 0.22),
+            hazard: standardMaterial(THREE, COLORS.redPad, COLORS.red, 0.24),
+            narrow: standardMaterial(THREE, COLORS.greenPad, COLORS.green, 0.2),
+            boost: standardMaterial(THREE, COLORS.goldPad, COLORS.gold, 0.22),
+            edge: basicGlowMaterial(THREE, COLORS.white, 0.2),
+            beacon: basicGlowMaterial(THREE, COLORS.white, 0.045),
+            pickup: basicGlowMaterial(THREE, COLORS.white, 0.82),
+            hazardMarker: basicGlowMaterial(THREE, COLORS.red, 0.68)
         },
-        stars: new THREE.PointsMaterial({
-            color: COLORS.star,
-            size: 0.16,
-            transparent: true,
-            opacity: 0.86,
-            depthWrite: false
-        })
+        stars: {
+            far: starMaterial(THREE, COLORS.starDim, 0.08, 0.34),
+            near: starMaterial(THREE, COLORS.star, 0.13, 0.58),
+            glint: starMaterial(THREE, COLORS.starGlint, 0.22, 0.74)
+        }
     };
 
     return {
         geometries,
         materials,
         textures: { hit: hitTexture },
-        createShockwaveMaterial(opacity = 0.9, color = COLORS.white) {
+        createShockwaveMaterial(opacity = 0.28, color = COLORS.cyan) {
             return new THREE.MeshBasicMaterial({
                 color,
                 map: hitTexture,

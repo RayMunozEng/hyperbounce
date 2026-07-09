@@ -95,7 +95,7 @@ function makeAssets() {
       },
     },
     createShockwaveMaterial() {
-      return { opacity: 1 };
+      return { opacity: 1, color: null };
     },
   };
 }
@@ -186,4 +186,22 @@ test("platform activation configures type state and feedback", () => {
   assert.equal(platform.pickup.visible, false);
   assert.equal(platform.feedbackTimer > 0, true);
   assert.equal(platform.isCleared, true);
+});
+
+test("platform landing feedback layers a softer afterglow behind the impact", () => {
+  const { default: Platform } = loadSourceModule("src/platform.js");
+  const THREE = makeFakeThree();
+  const platform = new Platform({ THREE, scene: makeObject3D(), assets: makeAssets() });
+
+  platform.activate("standard", 0, -12, 0);
+  platform.resolveLanding({ hitPickup: false, resetMultiplier: false, boost: 0 });
+
+  assert.equal(platform.impactAfterglow.visible, true);
+  assert.equal(platform.impactAfterglow.material.opacity < platform.shockwave.material.opacity, true);
+
+  platform.update(0.12, 0);
+
+  assert.equal(platform.shockwave.scale.x > 1, true);
+  assert.equal(platform.impactAfterglow.scale.x > platform.shockwave.scale.x, true);
+  assert.equal(platform.impactAfterglow.material.opacity < platform.shockwave.material.opacity, true);
 });
