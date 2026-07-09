@@ -1,7 +1,7 @@
 import Player from "./player";
 import PlatformManager from "./platform_generator";
 import { Howl } from "howler";
-import { CrossfadeMusic } from "./audio";
+import { CrossfadeMusic, createJumpSfx } from "./audio";
 import { createSharedAssets } from "./materials";
 import { Starfield } from "./effects";
 import { didCollect, didLand } from "./collision";
@@ -53,11 +53,7 @@ export default class Game {
             volume: 0.55,
             fadeSeconds: 4
         });
-        this.bounceSFX = new Howl({
-            src: ["./src/sounds/bounce_test02.wav"],
-            volume: 0.18
-        });
-        this.bounceSFX.rate(4);
+        this.bounceSFX = createJumpSfx({ HowlClass: Howl });
     }
 
     setupScene() {

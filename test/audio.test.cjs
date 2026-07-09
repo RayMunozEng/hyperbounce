@@ -103,3 +103,15 @@ test("crossfade music looper waits when duration is not loaded yet", () => {
   assert.equal(scheduled[0].delay, 1000);
   assert.equal(log.calls.some((call) => call[0] === "fade"), false);
 });
+
+test("jump SFX helper uses the neon jump asset at gameplay volume", () => {
+  const { createJumpSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const jump = createJumpSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 1);
+  assert.deepEqual(jump.options.src, ["./src/sounds/neon-jump.wav"]);
+  assert.equal(jump.options.volume, 0.34);
+  assert.equal(jump.options.rate, 1);
+});

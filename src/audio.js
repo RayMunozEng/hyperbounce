@@ -1,3 +1,11 @@
+export function createJumpSfx({ HowlClass }) {
+    return new HowlClass({
+        src: ["./src/sounds/neon-jump.wav"],
+        volume: 0.34,
+        rate: 1
+    });
+}
+
 export class CrossfadeMusic {
     constructor({
         HowlClass,
