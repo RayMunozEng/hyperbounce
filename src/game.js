@@ -1,265 +1,320 @@
-import Player from './player.js';
-import PlatformGenerator from './platform_generator.js';
-import {Howl, Howler} from 'howler';
-import { join } from 'path';
+import Player from "./player";
+import PlatformManager from "./platform_generator";
+import { Howl } from "howler";
+import { createSharedAssets } from "./materials";
+import { Starfield } from "./effects";
+import { didCollect, didLand } from "./collision";
+import { GAME_CONFIG, PLATFORM_TYPES, COLORS, UI_STATES } from "./config";
+import { InputController } from "./input";
+import { Hud } from "./hud";
+import { resolveLandingScore } from "./scoring";
 
 export default class Game {
-
-    constructor() {
+    constructor({ THREEImpl = window.THREE, doc = document, storage = localStorage } = {}) {
         window.game = this;
+        this.THREE = THREEImpl;
+        this.document = doc;
+        this.storage = storage;
         this.localStorageName = "hyperbouncescore";
-        if (localStorage.getItem(this.localStorageName) === null) {
-            this.highScore = 0;
-        } else {
-            this.highScore = localStorage.getItem(this.localStorageName);
-        }
-        console.log(this.highScore);
-        document.getElementById("highscore").innerHTML = "High Score: " + this.highScore;
-        this.running = true;
-        this.gameOver = false;
-        // this.speed = 0.35;
+        this.highScore = Number(this.storage.getItem(this.localStorageName)) || 0;
         this.score = 0;
         this.multiplier = 1;
-        this.speed = 0.1;
+        this.speed = GAME_CONFIG.run.baseSpeed;
+        this.state = UI_STATES.start;
+        this.isMuted = false;
+        this.cameraTarget = new this.THREE.Vector3();
 
+        this.setupAudio();
+        this.setupScene();
+        this.setupUi();
+        this.resetRun();
+
+        this.animate = this.animate.bind(this);
+        this.start = this.start.bind(this);
+        this.restart = this.restart.bind(this);
+        this.toggleSound = this.toggleSound.bind(this);
+        this.onResize = this.onResize.bind(this);
+
+        this.hud.bindControls({
+            start: this.start,
+            retry: this.restart,
+            sound: this.toggleSound
+        });
+        this.hud.showStart({ highScore: this.highScore });
+        this.document.defaultView.addEventListener("resize", this.onResize);
+        requestAnimationFrame(this.animate);
+    }
+
+    setupAudio() {
         this.bgm = new Howl({
             src: ["./src/sounds/space_love_attack.mp3"],
             autoplay: false,
-            volume: 0.9,
+            volume: 0.55,
             loop: true
         });
         this.bounceSFX = new Howl({
             src: ["./src/sounds/bounce_test02.wav"],
-            volume: 0.2
+            volume: 0.18
         });
         this.bounceSFX.rate(4);
-
-        this.clock = new THREE.Clock();
-        this.running = true;
-        this.scene = new THREE.Scene();
-        this.scene2 = new THREE.Scene();
-
-        this.camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.1, 100);
-        this.camera.position.set(0, 2, 10);
-        this.camera.rotation.x = -0.349066;
-        this.camera.layers.enable(1);
-
-        let light = new THREE.PointLight(0xffffff, 2.5, 1000);
-        light.position.set(30, 100, 100);
-        let light2 = new THREE.PointLight(0xffffff, 2.5, 1000);
-        light2.position.set(30, 100, 100);
-        this.scene.add(light);
-        this.scene2.add(light2);
-
-        this.player = new Player();
-        this.platformGenerator = new PlatformGenerator();
-        this.platformGenerator.generateFirstPlatforms();
-        this.platformGenerator.generatePlatform();
-
-        this.cameraLag = this.cameraLag.bind(this);
-        this.collided = this.collided.bind(this);
-        this.animate = this.animate.bind(this);
-        this.start = this.start.bind(this);
-        this.end = this.end.bind(this);
-        this.toggleSound = this.toggleSound.bind(this);
-        this.restart = this.restart.bind(this);
-        this.incrementMultiplier = this.incrementMultiplier.bind(this);
-        this.animateStars = this.animateStars.bind(this);
-
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true});
-        this.renderer.autoClear = false;
-        // this.renderer.setClearColor(0x242424);
-        this.renderer.setClearColor(0x080808);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(this.renderer.domElement);
-        this.canvas = this.renderer.domElement;
-        this.canvas.requestPointerLock = this.canvas.requestPointerLock || this.canvas.mozRequestPointerLock || this.canvas.webkitRequestPointerLock;
-        document.exitPointerLock = document.exitPointerLock || document.mozExitPointerLock || document.webkitExitPointerLock;
-        // this.renderer.render(this.scene, this.camera);
-
-
-        this.composer = new THREE.EffectComposer(this.renderer);
-        const renderPass = new THREE.RenderPass(this.scene, this.camera);
-        this.composer.addPass(renderPass);
-
-        this.particleCount = 1000;
-        const starGeo = new THREE.Geometry();
-        for (let i = 0; i < 1000; i++) {
-            let star = new THREE.Vector3();
-            star.x = THREE.Math.randFloatSpread(100);
-            star.y = THREE.Math.randFloatSpread(100);
-            star.z = THREE.Math.randFloatSpread(100);
-            starGeo.vertices.push(star);
-        }
-        const starMat = new THREE.PointsMaterial({color: 0x888888, size: 0.2});
-        this.stars = new THREE.Points(starGeo, starMat);
-        this.scene.add(this.stars);
-
-        const bloomPass = new THREE.UnrealBloomPass( new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-        bloomPass.threshold = 0.3;
-        bloomPass.strength = 3;
-        bloomPass.radius = 0.1;
-        bloomPass.renderToScreen = true;
-        this.composer.addPass(bloomPass);
-
-        this.renderer.gammaInput = true;
-        this.renderer.gammaOutput = true;
-        this.renderer.toneMappingExposure = Math.pow(0.9, 4.0); 
-
-        this.composer.render();
-        this.renderer.clearDepth();
-        this.renderer.render(this.scene2, this.camera);
-
-        this.startButton = document.getElementById("start-btn");
-        this.retryButton = document.getElementById("retry-btn");
-        this.soundButton = document.getElementById("sound-icon")
-        this.directions = document.getElementById("directions-container");
-        this.scoreHtml = document.getElementById("score");
-        this.highScoreMessage = document.getElementById("highscore");
-        this.links = document.getElementById("links");
-        this.title = document.getElementById("title");
-        this.gameOverTitle = document.getElementById("game-over");
-        this.startButton.addEventListener('click', this.start);
-        this.retryButton.addEventListener('click', this.restart);
-        this.soundButton.addEventListener('click', this.toggleSound);
     }
 
-    animateStars() {
-        for (let i = 0; i < 1000; i++) {
-            let star = this.stars.geometry.vertices[i];
-            star.add(new THREE.Vector3(0,0,this.speed * 0.35));
-            if (star.z > 50) star.add(new THREE.Vector3(0, 0, -100));
+    setupScene() {
+        this.clock = new this.THREE.Clock();
+        this.scene = new this.THREE.Scene();
+        this.scene2 = new this.THREE.Scene();
+        this.assets = createSharedAssets(this.THREE);
+
+        this.camera = new this.THREE.PerspectiveCamera(
+            GAME_CONFIG.camera.fov,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            100
+        );
+        this.camera.position.set(
+            GAME_CONFIG.camera.start.x,
+            GAME_CONFIG.camera.start.y,
+            GAME_CONFIG.camera.start.z
+        );
+        this.camera.rotation.x = GAME_CONFIG.camera.tilt;
+        this.camera.layers.enable(1);
+
+        this.addLighting(this.scene);
+        this.addLighting(this.scene2);
+
+        this.player = new Player({
+            THREE: this.THREE,
+            scene: this.scene2,
+            assets: this.assets
+        });
+        this.platformManager = new PlatformManager({
+            THREE: this.THREE,
+            scene: this.scene,
+            assets: this.assets
+        });
+        this.starfield = new Starfield({
+            THREE: this.THREE,
+            scene: this.scene,
+            material: this.assets.materials.stars
+        });
+
+        this.renderer = new this.THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.autoClear = false;
+        this.renderer.setClearColor(COLORS.background);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.gammaInput = true;
+        this.renderer.gammaOutput = true;
+        this.renderer.toneMappingExposure = Math.pow(0.9, 4.0);
+        this.document.body.appendChild(this.renderer.domElement);
+        this.canvas = this.renderer.domElement;
+        this.composer = this.createComposer();
+    }
+
+    setupUi() {
+        this.input = new InputController(this.document);
+        this.hud = new Hud(this.document);
+    }
+
+    addLighting(scene) {
+        const key = new this.THREE.PointLight(COLORS.cyan, 2.2, 90);
+        const rim = new this.THREE.PointLight(COLORS.magenta, 1.4, 70);
+
+        key.position.set(18, 28, 16);
+        rim.position.set(-20, 12, -12);
+        scene.add(key);
+        scene.add(rim);
+    }
+
+    createComposer() {
+        if (!this.THREE.EffectComposer || !this.THREE.RenderPass) return null;
+
+        const composer = new this.THREE.EffectComposer(this.renderer);
+        composer.addPass(new this.THREE.RenderPass(this.scene, this.camera));
+
+        if (this.THREE.UnrealBloomPass) {
+            const bloom = new this.THREE.UnrealBloomPass(
+                new this.THREE.Vector2(window.innerWidth, window.innerHeight),
+                1.35,
+                0.36,
+                0.75
+            );
+            bloom.threshold = 0.22;
+            bloom.strength = 2.2;
+            bloom.radius = 0.16;
+            bloom.renderToScreen = true;
+            composer.addPass(bloom);
         }
-        this.stars.geometry.verticesNeedUpdate = true;
+
+        return composer;
+    }
+
+    resetRun() {
+        this.score = 0;
+        this.multiplier = 1;
+        this.speed = GAME_CONFIG.run.baseSpeed;
+        this.player.reset();
+        this.platformManager.reset();
+        this.camera.position.set(
+            GAME_CONFIG.camera.start.x,
+            GAME_CONFIG.camera.start.y,
+            GAME_CONFIG.camera.start.z
+        );
+        this.hud.updateRun({
+            score: this.score,
+            highScore: this.highScore,
+            multiplier: this.multiplier
+        });
     }
 
     start() {
-        this.startButton.disabled = true;
-        this.startButton.classList.add("hidden");
-        this.soundButton.classList.add("hidden");
-        this.directions.classList.add("hidden");
-        this.title.classList.add("hidden");
-        this.links.classList.add("hidden");
-        this.scoreHtml.classList.remove("hidden");
-        this.canvas.requestPointerLock();
-        this.animate();
-        this.player.move();
-        this.platformGenerator.update();
+        if (this.state === UI_STATES.playing) return;
+
+        this.resetRun();
+        this.state = UI_STATES.playing;
+        this.input.start();
+        this.input.lock(this.canvas);
+        this.hud.showPlaying({
+            score: this.score,
+            highScore: this.highScore,
+            multiplier: this.multiplier
+        });
         this.bgm.play();
     }
 
+    restart() {
+        this.start();
+    }
+
+    triggerDeath() {
+        if (this.state !== UI_STATES.playing) return;
+
+        this.state = "dying";
+        this.input.stop();
+        this.input.unlock();
+        this.player.beginDeath();
+    }
+
     end() {
-        this.running = false;
-        if (this.highScore < this.score) {
-            this.highScoreMessage.innerHTML = "New High Score! Previous: " + this.highScore;
-            localStorage.setItem(this.localStorageName, this.score);
+        const isNewHighScore = this.score > this.highScore;
+
+        if (isNewHighScore) {
             this.highScore = this.score;
-        } else {
-            this.highScoreMessage.innerHTML = "High Score: " + this.highScore;
+            this.storage.setItem(this.localStorageName, String(this.highScore));
         }
-        this.highScoreMessage.classList.remove("hidden");
-        this.links.classList.remove("hidden");
-        this.gameOverTitle.classList.remove("hidden");
-        this.retryButton.classList.remove("hidden");
-        this.soundButton.classList.remove("hidden");
-        console.log(this.platformGenerator.platformArr);
+
+        this.state = UI_STATES.gameOver;
+        this.hud.showGameOver({
+            score: this.score,
+            highScore: this.highScore,
+            isNewHighScore
+        });
     }
 
     toggleSound() {
-        if (this.soundButton.classList.contains('fa-volume-up')) {
-            this.soundButton.classList.remove('fa-volume-up');
-            this.soundButton.classList.add('fa-volume-mute');
-            this.bgm.mute(true);
-        } else {
-            this.soundButton.classList.remove('fa-volume-mute');
-            this.soundButton.classList.add('fa-volume-up');
-            this.bgm.mute(false);
-        }
-    }
-
-    restart() {
-        this.links.classList.add("hidden");
-        this.gameOverTitle.classList.add("hidden");
-        this.soundButton.classList.add("hidden");
-        this.retryButton.classList.add("hidden");
-        this.highScoreMessage.classList.add("hidden");
-        this.player.reset();
-        this.platformGenerator.reset();
-        this.camera.position.set(0, 2, 10);
-        this.score = 0;
-        this.gameOver = false;
-        this.running = true;
-        this.multiplier = 1;
-        this.speed = 0.1;
-        this.canvas.requestPointerLock();
-        this.animate();
-    }
-
-    cameraLag(spherePos) {
-        const vec = new THREE.Vector3(spherePos, 2, 10);
-        this.camera.position.lerp(vec, 0.05);
-    }   
-
-    collided(playerPos, platform) {
-        const rightCollision = platform.position.x + 2;
-        const leftCollision = platform.position.x - 2;
-        if (playerPos >= leftCollision && playerPos <= rightCollision) {
-            return true;
-        }
-        return false;
-    }
-
-    
-    incrementMultiplier(playerPos, platform) {
-        let multPos = platform.scoreMult.position.x + platform.platformGroup.position.x;
-        if (playerPos >= multPos - 0.65 && playerPos <= multPos + 0.65) {
-            this.multiplier += 1;
-            return true;
-        } else {
-            this.multiplier = 1;
-            return false;
-        }
+        this.isMuted = !this.isMuted;
+        this.bgm.mute(this.isMuted);
+        this.bounceSFX.mute(this.isMuted);
+        this.hud.setSoundMuted(this.isMuted);
     }
 
     animate() {
-        let id = requestAnimationFrame(this.animate);
-        if (this.gameOver) {
-            this.end();
-            cancelAnimationFrame(id);
-        }
-        let playerPos = this.player.sphere.position;
-        this.cameraLag(playerPos.x);
+        const delta = Math.min(this.clock.getDelta(), 0.033);
 
-        if (this.running) {
-            const currPlat = this.platformGenerator.platformArr[0];
-            if (playerPos.y <= -2.5 && 
-                !this.collided(playerPos.x, currPlat.platformGroup)) {
-                    this.running = false;
-                    document.exitPointerLock();
-            } else if (playerPos.y <= -2.5) {
-                let multHit;
-                if (currPlat.scoreMultExists) {
-                    multHit = this.incrementMultiplier(playerPos.x, currPlat);
-                } 
-                this.score += this.multiplier;
-                if (this.score > 1) { 
-                    this.platformGenerator.generatePlatform();
-                }
-                this.platformGenerator.platformArr[0].collision(multHit);
-                this.platformGenerator.speed += 0.001;
-                this.player.speed += 0.001;
-                this.bounceSFX.play();
-                document.getElementById("score").innerHTML = "Score: " + this.score;
-            }
+        if (this.state === UI_STATES.playing) {
+            this.updatePlaying(delta);
+        } else if (this.state === "dying") {
+            this.platformManager.update(delta, this.speed * 0.55);
+            if (this.player.updateDeath(delta)) this.end();
+        }
+
+        this.starfield.update(delta, Math.max(this.speed, 0.16));
+        this.cameraLag();
+        this.render();
+        requestAnimationFrame(this.animate);
+    }
+
+    updatePlaying(delta) {
+        this.player.update(delta, this.input.consumeMovement(), true);
+        this.platformManager.update(delta, this.speed);
+
+        if (this.player.landedThisFrame) {
+            this.resolveLanding();
+        }
+    }
+
+    resolveLanding() {
+        const platform = this.platformManager.current();
+
+        if (!platform || !didLand(this.player.position.x, platform.group.position.x, platform.radius)) {
+            this.triggerDeath();
+            return;
+        }
+
+        const platformType = PLATFORM_TYPES[platform.type] || PLATFORM_TYPES.standard;
+        const hitPickup = platformType.pickup && platform.pickup.visible ?
+            didCollect(
+                this.player.position.x,
+                platform.getPickupWorldX(),
+                GAME_CONFIG.platform.pickupRadius
+            ) :
+            false;
+        const result = resolveLandingScore({
+            score: this.score,
+            multiplier: this.multiplier,
+            platformType: platform.type,
+            hitPickup
+        });
+
+        this.score = result.score;
+        this.multiplier = result.multiplier;
+        platform.resolveLanding({
+            hitPickup,
+            resetMultiplier: result.resetMultiplier,
+            boost: result.bonus
+        });
+        this.platformManager.spawnNext(this.score);
+        this.speed = Math.min(
+            GAME_CONFIG.run.maxSpeed,
+            this.speed + GAME_CONFIG.run.speedGain
+        );
+        this.bounceSFX.play();
+        this.hud.updateRun({
+            score: this.score,
+            highScore: this.highScore,
+            multiplier: this.multiplier
+        });
+    }
+
+    cameraLag() {
+        this.cameraTarget.set(
+            this.player.position.x,
+            GAME_CONFIG.camera.start.y,
+            GAME_CONFIG.camera.start.z
+        );
+        this.camera.position.lerp(this.cameraTarget, GAME_CONFIG.camera.followLerp);
+    }
+
+    render() {
+        this.renderer.clear();
+
+        if (this.composer) {
+            this.composer.render();
         } else {
-            this.player.dead();
+            this.renderer.render(this.scene, this.camera);
         }
-        
-        this.animateStars();
-        this.speed += 0.001;
 
-        this.composer.render();
         this.renderer.clearDepth();
         this.renderer.render(this.scene2, this.camera);
+    }
+
+    onResize() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(width, height);
+        if (this.composer && this.composer.setSize) this.composer.setSize(width, height);
     }
 }

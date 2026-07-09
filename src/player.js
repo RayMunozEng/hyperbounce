@@ -19,6 +19,7 @@ export default class Player {
         this.direction = 1;
         this.speed = GAME_CONFIG.player.bounceSpeed;
         this.deadState = false;
+        this.landedThisFrame = false;
         this.trailCursor = 0;
 
         this.core = new THREE.Mesh(assets.geometries.playerCore, assets.materials.player.core);
@@ -59,6 +60,7 @@ export default class Player {
         this.direction = 1;
         this.speed = GAME_CONFIG.player.bounceSpeed;
         this.deadState = false;
+        this.landedThisFrame = false;
         this.trailCursor = 0;
         this.group.visible = true;
         this.seedTrail();
@@ -77,6 +79,7 @@ export default class Player {
     }
 
     update(delta, movement, running) {
+        this.landedThisFrame = false;
         if (!running || this.deadState) return;
 
         const frameScale = Math.min(delta * 60, 2);
@@ -93,6 +96,7 @@ export default class Player {
         } else if (this.position.y <= GAME_CONFIG.player.startY) {
             this.position.y = GAME_CONFIG.player.startY;
             this.direction = 1;
+            this.landedThisFrame = true;
         }
 
         this.shell.rotation.y += 0.025 * frameScale;

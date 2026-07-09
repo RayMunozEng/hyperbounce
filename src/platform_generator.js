@@ -1,55 +1,108 @@
-import Platform from './platform.js';
+import { GAME_CONFIG } from "./config";
+import Platform from "./platform";
 
-export default class PlatformGenerator {
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
 
-    constructor() {
-        this.platformArr = [];
-        this.update = this.update.bind(this);
-        this.getRandomArbitrary = this.getRandomArbitrary.bind(this);
-        this.speed = 0.3;
-        this.reset = this.reset.bind(this);
+export default class PlatformManager {
+    constructor({
+        THREE = typeof window === "undefined" ? undefined : window.THREE,
+        scene,
+        assets,
+        PlatformClass = Platform,
+        random = Math.random
+    } = {}) {
+        this.THREE = THREE;
+        this.scene = scene;
+        this.assets = assets;
+        this.PlatformClass = PlatformClass;
+        this.random = random;
+        this.pool = [];
+        this.active = [];
+        this.platformArr = this.active;
+        this.spawnIndex = 0;
+        this.lastX = 0;
+
+        for (let i = 0; i < GAME_CONFIG.platform.poolSize; i++) {
+            this.pool.push(new PlatformClass({ THREE, scene, assets }));
+        }
     }
 
     reset() {
-        for (let i = 0; i < this.platformArr.length; i++) {
-            this.platformArr[i].removePlatform();
-        }
-        this.platformArr = [];
-        this.speed = 0.3;
-        this.generateFirstPlatforms();
-        this.generatePlatform();
+        this.pool.forEach((platform) => platform.deactivate());
+        this.active.length = 0;
+        this.spawnIndex = 0;
+        this.lastX = 0;
+        this.activatePlatform("standard", 0, 0);
+        this.activatePlatform("standard", 0, GAME_CONFIG.platform.startZ);
     }
 
-    getRandomArbitrary(min, max) {
-        return Math.random() * (max - min) + min;
+    current() {
+        return this.active.find((platform) => !platform.isCleared);
+    }
+
+    spawnNext(score) {
+        const farthestZ = this.active.reduce((minZ, platform) => {
+            return Math.min(minZ, platform.group.position.z);
+        }, 0);
+        const z = Math.min(GAME_CONFIG.platform.spawnZ, farthestZ - 10);
+        const x = this.nextX(score);
+        const type = this.chooseType(score);
+
+        return this.activatePlatform(type, x, z);
+    }
+
+    activatePlatform(type, x, z) {
+        const platform = this.pool.find((candidate) => !candidate.active);
+
+        if (!platform) return null;
+
+        platform.activate(type, x, z, this.spawnIndex);
+        platform.isCleared = false;
+        this.active.push(platform);
+        this.spawnIndex += 1;
+        this.lastX = x;
+        return platform;
+    }
+
+    chooseType(score) {
+        const roll = this.random();
+
+        if (score < 3) {
+            return roll < 0.24 ? "multiplier" : "standard";
+        }
+
+        if (score >= 8 && roll < 0.1) return "boost";
+        if (score >= 6 && roll < 0.28) return "hazard";
+        if (score >= 5 && roll < 0.48) return "narrow";
+        if (roll < 0.72) return "multiplier";
+        return "standard";
+    }
+
+    nextX(score) {
+        const spread = score < 4 ? 4.8 : 6.8;
+        const drift = (this.random() - 0.5) * spread;
+        return clamp(this.lastX + drift, -6.5, 6.5);
+    }
+
+    update(delta, speed) {
+        for (let i = this.active.length - 1; i >= 0; i--) {
+            const platform = this.active[i];
+            platform.update(delta, speed);
+
+            if (platform.group.position.z > GAME_CONFIG.platform.removeZ) {
+                platform.deactivate();
+                this.active.splice(i, 1);
+            }
+        }
     }
 
     generateFirstPlatforms() {
-        const platform = new Platform(false);
-        const platform2 = new Platform();
-        this.platformArr.push(platform);
-        platform2.platformGroup.position.z = -10;
-        this.platformArr.push(platform2);
+        this.reset();
     }
 
-    generatePlatform() {
-        const platform = new Platform();
-        platform.platformGroup.translateX(this.getRandomArbitrary(-6, 6));
-        platform.platformGroup.translateZ(-20);
-        this.platformArr.push(platform);
-    }
-
-    update() {
-        requestAnimationFrame(this.update);
-        for (let i = 0; i < this.platformArr.length; i++) {
-            const element = this.platformArr[i].platformGroup;
-            element.position.z += this.speed;
-        }
-
-        if (this.platformArr.length >= 1 && this.platformArr[0].platformGroup.position.z > 10) {
-            let removedPlat = this.platformArr.shift();
-            removedPlat.removePlatform();
-            removedPlat = undefined;
-        }
+    generatePlatform(score = 0) {
+        return this.spawnNext(score);
     }
 }

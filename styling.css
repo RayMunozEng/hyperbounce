@@ -111,7 +111,7 @@ a {
     top: 50%;
     left: 50%;
     display: grid;
-    width: min(480px, calc(100vw - 36px));
+    width: min(560px, calc(100vw - 36px));
     gap: 14px;
     justify-items: center;
     transform: translate(-50%, -52%);
@@ -126,9 +126,10 @@ a {
 #title {
     margin: 0;
     color: var(--text);
-    font-size: 62px;
+    font-size: 52px;
     line-height: 0.95;
     text-align: center;
+    max-width: 100%;
     text-shadow:
         0 0 18px rgba(0, 245, 255, 0.76),
         0 0 34px rgba(255, 61, 242, 0.35);

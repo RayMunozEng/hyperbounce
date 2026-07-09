@@ -134,4 +134,5 @@ test("platform activation configures type state and feedback", () => {
   assert.equal(platform.group.position.z, -12);
   assert.equal(platform.pickup.visible, false);
   assert.equal(platform.feedbackTimer > 0, true);
+  assert.equal(platform.isCleared, true);
 });

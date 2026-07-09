@@ -126,6 +126,7 @@ export default class Platform {
     }
 
     resolveLanding({ hitPickup, resetMultiplier, boost }) {
+        this.isCleared = true;
         this.feedbackTimer = 0.38;
         this.shockwave.visible = true;
         this.shockwave.material.opacity = resetMultiplier ? 0.95 : 0.82;
