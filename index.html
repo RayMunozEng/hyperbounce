@@ -6,34 +6,51 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Hyperbounce</title>
     <link rel="stylesheet" href="styling.css">
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.8.1/css/all.css" integrity="sha384-50oBUHEmvpQ+1lW4y57PTFmhCaXp0ML5d60M1M7uH2+nqUivzIebhndOJK28anvf"
-        crossorigin="anonymous">
     <link rel="apple-touch-icon" sizes="180x180" href="src/images/favicon_io/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="src/images/favicon_io/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="src/images/favicon_io/favicon-16x16.png">
     <link rel="manifest" href="src/images/favicon_io/site.webmanifest">
-    <link rel="mask-icon" href="src/images/favicon_io/safari-pinned-tab.svg" color="#5bbad5">
-    <meta name="msapplication-TileColor" content="#da532c">
-    <meta name="theme-color" content="#ffffff">
+    <link rel="mask-icon" href="src/images/favicon_io/safari-pinned-tab.svg" color="#00f5ff">
+    <meta name="theme-color" content="#040712">
 </head>
 <body>
-    <h1 id="title">HYPERBOUNCE</h1>
-    <div id="score" class="hidden">Score: 0</div> 
-    <div id="highscore" class="hidden"></div>
-    <div id="game-over" class="hidden">GAME OVER</div>
-    <button id="start-btn">START</button>
-    <button id="retry-btn" class="hidden">RETRY</button>
-    <div id="directions-container">
-        <h2>Directions</h2>
-        <h4>Move left or right with your mouse/trackpad to land on platforms. Hitting white dots increases your score multiplier. The longer you live, the faster it gets!</h4>
-    </div>
-    <div id="links">
-        <a href="https://github.com/rmunoz1994"><i id="icon" class="fab fa-github"></i></a>
-        <a href="https://www.linkedin.com/in/raymond-mu%C3%B1oz/"><i id="icon" class="fab fa-linkedin-in"></i></a>
-        <a href="https://angel.co/raymond-munoz"><i id="icon" class="fab fa-angellist"></i></a>
-    </div>
-    <div><i id="sound-icon" class="fas fa-volume-up"></i></div>
-    <!-- <div class="directions">Move left or right with your mouse/trackpad to land on platforms. Hitting white dots increases your score multiplier.</div> -->
+    <main id="app-shell" class="app-shell">
+        <section id="status-chip" class="hud-strip hidden" aria-live="polite">
+            <div class="hud-stat">
+                <span class="hud-label">Score</span>
+                <strong id="score">0</strong>
+            </div>
+            <div class="hud-stat">
+                <span class="hud-label">Best</span>
+                <strong id="highscore">0</strong>
+            </div>
+            <div class="hud-stat accent">
+                <span class="hud-label">Combo</span>
+                <strong id="multiplier">x1</strong>
+            </div>
+        </section>
+
+        <section id="start-panel" class="start-panel">
+            <p id="game-over" class="state-title hidden">GAME OVER</p>
+            <h1 id="title">HYPERBOUNCE</h1>
+            <p class="tagline">Neon Skill-Runner</p>
+            <div id="directions-container" class="run-mantra">Land. Chain. Survive.</div>
+            <div class="menu-actions">
+                <button id="start-btn" class="primary-action" type="button">Start Run</button>
+                <button id="retry-btn" class="primary-action danger hidden" type="button">Retry</button>
+            </div>
+        </section>
+
+        <nav id="links" class="profile-links" aria-label="Profile links">
+            <a href="https://github.com/rmunoz1994">GitHub</a>
+            <a href="https://www.linkedin.com/in/raymond-mu%C3%B1oz/">LinkedIn</a>
+            <a href="https://angel.co/raymond-munoz">AngelList</a>
+        </nav>
+
+        <button id="sound-btn" class="sound-toggle" type="button">
+            <span id="sound-icon">Sound On</span>
+        </button>
+    </main>
     <script src="bundle.js"></script>
 </body>
 </html>
