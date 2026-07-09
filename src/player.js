@@ -96,10 +96,12 @@ export default class Player {
         this.position.y += this.direction * this.speed * frameScale;
 
         if (this.position.y >= GAME_CONFIG.player.topY) {
-            this.position.y = GAME_CONFIG.player.topY;
+            const overshoot = this.position.y - GAME_CONFIG.player.topY;
+            this.position.y = GAME_CONFIG.player.topY - overshoot;
             this.direction = -1;
         } else if (this.position.y <= GAME_CONFIG.player.startY) {
-            this.position.y = GAME_CONFIG.player.startY;
+            const overshoot = GAME_CONFIG.player.startY - this.position.y;
+            this.position.y = GAME_CONFIG.player.startY + overshoot;
             this.direction = 1;
             this.landedThisFrame = true;
         }

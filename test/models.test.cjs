@@ -132,6 +132,28 @@ test("player syncs bounce speed to the current run speed", () => {
   assert.equal(player.speed, resolveBounceSpeed(runSpeed));
 });
 
+test("player reflects leftover motion at bounce boundaries", () => {
+  const { default: Player } = loadSourceModule("src/player.js");
+  const { GAME_CONFIG } = loadSourceModule("src/config.js");
+  const THREE = makeFakeThree();
+  const player = new Player({ THREE, scene: makeObject3D(), assets: makeAssets() });
+
+  player.position.y = GAME_CONFIG.player.topY - 0.01;
+  player.direction = 1;
+  player.update(1 / 60, 0, true);
+
+  assert.equal(player.direction, -1);
+  assert.equal(player.position.y < GAME_CONFIG.player.topY, true);
+
+  player.position.y = GAME_CONFIG.player.startY + 0.01;
+  player.direction = -1;
+  player.update(1 / 60, 0, true);
+
+  assert.equal(player.direction, 1);
+  assert.equal(player.landedThisFrame, true);
+  assert.equal(player.position.y > GAME_CONFIG.player.startY, true);
+});
+
 test("player defaults to the primary game scene", () => {
   const { default: Player } = loadSourceModule("src/player.js");
   const THREE = makeFakeThree();
