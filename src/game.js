@@ -169,7 +169,7 @@ export default class Game {
         this.resetRun();
         this.platformManager.releaseLaunchPad();
         this.state = UI_STATES.playing;
-        this.input.start();
+        this.input.start(this.canvas);
         this.hud.showPlaying({
             score: this.score,
             highScore: this.highScore,
@@ -187,7 +187,6 @@ export default class Game {
 
         this.state = "dying";
         this.input.stop();
-        this.input.unlock();
         this.player.beginDeath();
     }
 

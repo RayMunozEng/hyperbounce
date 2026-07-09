@@ -35,6 +35,11 @@ body {
     background: var(--bg);
 }
 
+body.is-playing,
+body.is-playing * {
+    cursor: none !important;
+}
+
 canvas {
     position: fixed;
     inset: 0;

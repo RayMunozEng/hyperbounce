@@ -40,6 +40,7 @@ function makeDocument(ids) {
   return {
     elements,
     listeners,
+    body: makeElement([]),
     exitPointerLockCalled: false,
     getElementById(id) {
       return this.elements[id];
@@ -67,6 +68,30 @@ test("input controller accumulates movement and consumes it once", () => {
 
   assert.equal(input.consumeMovement(), 5);
   assert.equal(input.consumeMovement(), 0);
+});
+
+test("input controller enters and exits play control mode", () => {
+  const { InputController } = loadSourceModule("src/input.js");
+  const doc = makeDocument([]);
+  const canvas = {
+    locked: false,
+    requestPointerLock() {
+      this.locked = true;
+    },
+  };
+  const input = new InputController(doc);
+
+  input.start(canvas);
+
+  assert.equal(canvas.locked, true);
+  assert.equal(doc.body.classList.contains("is-playing"), true);
+  assert.equal(Boolean(doc.listeners.mousemove), true);
+
+  input.stop();
+
+  assert.equal(doc.exitPointerLockCalled, true);
+  assert.equal(doc.body.classList.contains("is-playing"), false);
+  assert.equal(Boolean(doc.listeners.mousemove), false);
 });
 
 test("input controller locks and unlocks pointer control", () => {

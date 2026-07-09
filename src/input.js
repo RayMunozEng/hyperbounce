@@ -6,10 +6,12 @@ export class InputController {
         this.onMouseMove = this.onMouseMove.bind(this);
     }
 
-    start() {
+    start(canvas) {
         if (this.active) return;
         this.active = true;
         this.document.addEventListener("mousemove", this.onMouseMove, false);
+        this.hideCursor();
+        if (canvas) this.lock(canvas);
     }
 
     stop() {
@@ -17,6 +19,8 @@ export class InputController {
         this.active = false;
         this.movementX = 0;
         this.document.removeEventListener("mousemove", this.onMouseMove, false);
+        this.unlock();
+        this.showCursor();
     }
 
     lock(canvas) {
@@ -43,6 +47,28 @@ export class InputController {
             this.document.webkitExitPointerLock;
 
         if (unlock) unlock.call(this.document);
+    }
+
+    hideCursor() {
+        const body = this.document.body;
+        if (!body) return;
+
+        if (body.classList) {
+            body.classList.add("is-playing");
+        } else if (body.style) {
+            body.style.cursor = "none";
+        }
+    }
+
+    showCursor() {
+        const body = this.document.body;
+        if (!body) return;
+
+        if (body.classList) {
+            body.classList.remove("is-playing");
+        } else if (body.style) {
+            body.style.cursor = "";
+        }
     }
 
     consumeMovement() {
