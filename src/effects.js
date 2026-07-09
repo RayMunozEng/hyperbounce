@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from "./config";
+import { COLORS, GAME_CONFIG } from "./config";
 
 export class Starfield {
     constructor({
@@ -14,7 +14,7 @@ export class Starfield {
         this.speedScale = speedScale;
         this.geometry = new THREE.Geometry();
         this.material = material || new THREE.PointsMaterial({
-            color: 0x99ddff,
+            color: COLORS.star,
             size: GAME_CONFIG.stars.size,
             transparent: true,
             opacity: 0.86,

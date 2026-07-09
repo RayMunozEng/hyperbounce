@@ -63,7 +63,7 @@ export function createSharedAssets(THREE) {
             hazardMarker: basicGlowMaterial(THREE, COLORS.red, 0.9)
         },
         stars: new THREE.PointsMaterial({
-            color: 0x99ddff,
+            color: COLORS.star,
             size: 0.16,
             transparent: true,
             opacity: 0.86,

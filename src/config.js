@@ -6,6 +6,7 @@ export const COLORS = {
     gold: 0xffc857,
     red: 0xff355e,
     green: 0x52ff9f,
+    star: 0x99ddff,
     white: 0xffffff,
     slate: 0x15233f
 };

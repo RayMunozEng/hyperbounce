@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from "./config";
+import { COLORS, GAME_CONFIG } from "./config";
 import { createSharedAssets } from "./materials";
 
 function clamp(value, min, max) {
@@ -26,7 +26,7 @@ export default class Player {
         this.shell = new THREE.Mesh(assets.geometries.playerShell, assets.materials.player.shell);
         this.ringA = new THREE.Mesh(assets.geometries.playerRing, assets.materials.player.ring);
         this.ringB = new THREE.Mesh(assets.geometries.playerRing, assets.materials.player.ring);
-        this.light = new THREE.PointLight(0x00f5ff, 1.8, 9);
+        this.light = new THREE.PointLight(COLORS.cyan, 1.8, 9);
         this.trail = this.createTrail();
 
         this.ringA.rotation.x = Math.PI / 2;
