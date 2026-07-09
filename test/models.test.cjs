@@ -118,6 +118,20 @@ test("player reset and update keep movement bounded", () => {
   assert.equal(player.position.y, -2.5);
 });
 
+test("player syncs bounce speed to the current run speed", () => {
+  const { default: Player } = loadSourceModule("src/player.js");
+  const { GAME_CONFIG } = loadSourceModule("src/config.js");
+  const { resolveBounceSpeed } = loadSourceModule("src/tempo.js");
+  const THREE = makeFakeThree();
+  const scene = makeObject3D();
+  const player = new Player({ THREE, scene, assets: makeAssets() });
+  const runSpeed = GAME_CONFIG.run.baseSpeed + GAME_CONFIG.run.speedGain * 40;
+
+  player.syncRunSpeed(runSpeed);
+
+  assert.equal(player.speed, resolveBounceSpeed(runSpeed));
+});
+
 test("platform activation configures type state and feedback", () => {
   const { default: Platform } = loadSourceModule("src/platform.js");
   const THREE = makeFakeThree();

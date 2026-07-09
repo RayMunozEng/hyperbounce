@@ -235,6 +235,7 @@ export default class Game {
     }
 
     updatePlaying(delta) {
+        this.player.syncRunSpeed(this.speed);
         this.player.update(delta, this.input.consumeMovement(), true);
         this.platformManager.update(delta, this.speed);
 

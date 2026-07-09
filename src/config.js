@@ -22,7 +22,6 @@ export const GAME_CONFIG = {
         startY: -2.5,
         topY: 2.55,
         radius: 0.9,
-        bounceSpeed: 0.3,
         maxX: 8.5,
         inputSensitivity: 0.026,
         deathFloor: -18

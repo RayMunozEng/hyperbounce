@@ -1,5 +1,6 @@
 import { COLORS, GAME_CONFIG } from "./config";
 import { createSharedAssets } from "./materials";
+import { resolveBounceSpeed } from "./tempo";
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -17,7 +18,7 @@ export default class Player {
         this.group = new THREE.Group();
         this.position = this.group.position;
         this.direction = 1;
-        this.speed = GAME_CONFIG.player.bounceSpeed;
+        this.speed = resolveBounceSpeed(GAME_CONFIG.run.baseSpeed);
         this.deadState = false;
         this.landedThisFrame = false;
         this.trailCursor = 0;
@@ -58,12 +59,16 @@ export default class Player {
     reset() {
         this.position.set(0, GAME_CONFIG.player.startY, 0);
         this.direction = 1;
-        this.speed = GAME_CONFIG.player.bounceSpeed;
+        this.syncRunSpeed(GAME_CONFIG.run.baseSpeed);
         this.deadState = false;
         this.landedThisFrame = false;
         this.trailCursor = 0;
         this.group.visible = true;
         this.seedTrail();
+    }
+
+    syncRunSpeed(runSpeed) {
+        this.speed = resolveBounceSpeed(runSpeed);
     }
 
     seedTrail() {
