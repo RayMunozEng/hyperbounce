@@ -55,7 +55,13 @@ test("auth client supports Google and email sign-in through Supabase", async () 
     url: "https://project.supabase.co",
     anonKey: "anon",
     supabaseFactory: makeSupabaseFactory(calls),
-    windowObj: { location: { href: "https://example.com/game" } },
+    windowObj: {
+      location: {
+        href: "https://example.com/game?build=123#menu",
+        origin: "https://example.com",
+        pathname: "/game",
+      },
+    },
   });
 
   await client.signInWithGoogle();

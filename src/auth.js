@@ -8,7 +8,13 @@ export function resolveSupabaseConfig(win = typeof window === "undefined" ? null
 }
 
 function resolveRedirectUrl(win) {
-    return win && win.location && win.location.href ? String(win.location.href) : "";
+    if (!win || !win.location) return "";
+
+    const origin = String(win.location.origin || "");
+    const pathname = String(win.location.pathname || "");
+
+    if (origin && pathname) return `${origin}${pathname}`;
+    return String(win.location.href || "").split(/[?#]/, 1)[0];
 }
 
 function createMissingConfigError() {
