@@ -922,6 +922,49 @@ test("game prompts for a leaderboard name when the score qualifies", () => {
   assert.deepEqual(calls.filter((call) => call[0] === "showGameOver"), [["showGameOver", 14, 14, 12, true]]);
 });
 
+test("game reuses an authenticated account name without reopening the name form", () => {
+  const { default: Game } = loadSourceModule("src/game.js");
+  const calls = [];
+  const game = {
+    score: 14,
+    highScore: 10,
+    overallHighScore: 20,
+    leaderboardName: "Ray",
+    leaderboardEntries: [{ name: "Ada", score: 12 }],
+    localStorageName: "hyperbouncescore",
+    musicHighScoreRate: 1.12,
+    musicShiftSeconds: 0.45,
+    storage: { setItem() {} },
+    leaderboardClient: {
+      isEnabled() {
+        return true;
+      },
+      qualifies() {
+        return true;
+      },
+    },
+    bgm: { shiftRate() {} },
+    highScoreSFX: { fanfare: { play() {} } },
+    submitLeaderboardScore(event, name) {
+      calls.push(["submit", name]);
+      return Promise.resolve();
+    },
+    hud: {
+      showGameOver(args) {
+        calls.push(["showGameOver", args.qualifiesForLeaderboard]);
+      },
+    },
+  };
+
+  Object.setPrototypeOf(game, Game.prototype);
+  Game.prototype.end.call(game);
+
+  assert.deepEqual(calls, [
+    ["showGameOver", false],
+    ["submit", "Ray"],
+  ]);
+});
+
 test("game submits leaderboard names and refreshes overall best", async () => {
   const { default: Game } = loadSourceModule("src/game.js");
   const calls = [];

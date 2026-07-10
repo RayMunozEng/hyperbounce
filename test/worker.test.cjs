@@ -68,6 +68,10 @@ function makeEnv(fetchImpl) {
               .slice(0, 10),
           };
         },
+        async first() {
+          const entry = scores.get(String(values[0]));
+          return entry ? { name: entry.name, score: entry.score } : null;
+        },
         async run() {
           assert.match(sql, /ON CONFLICT\s*\(user_id\)/i);
           const [userId, name, score, submittedAt] = values;
@@ -218,6 +222,38 @@ test("leaderboard worker keeps one private name and personal best per authentica
     { name: "Nova", score: 50 },
   ]);
   assert.ok(result.entries.every((entry) => !("userId" in entry)));
+});
+
+test("leaderboard worker returns the saved name only to its authenticated account", async () => {
+  const worker = await loadWorker();
+  const env = makeEnv(async (url, options = {}) => {
+    const token = options.headers.Authorization || "";
+    const id = token.endsWith("user-two") ? "user-2" : "user-1";
+    return new ResponseShim(JSON.stringify({ id }), { status: 200 });
+  });
+  const post = (token, name) => worker.fetch(makeRequest("https://scores.example.dev/leaderboard", {
+    method: "POST",
+    body: JSON.stringify({ name, score: 42 }),
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Origin: "https://raymunozeng.github.io",
+    },
+  }), env);
+
+  await post("user-one", "Ray");
+  await post("user-two", "Nova");
+
+  const response = await worker.fetch(makeRequest("https://scores.example.dev/leaderboard", {
+    headers: {
+      Authorization: "Bearer user-one",
+      Origin: "https://raymunozeng.github.io",
+    },
+  }), env);
+  const body = await response.json();
+
+  assert.equal(body.playerName, "Ray");
+  assert.equal(body.entries.some((entry) => "userId" in entry), false);
 });
 
 test("leaderboard worker uses conflict-safe storage for concurrent accounts", async () => {

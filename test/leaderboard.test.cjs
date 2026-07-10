@@ -60,12 +60,12 @@ test("leaderboard client loads and submits scores through the configured API", a
 
 test("leaderboard client sends bearer token when authenticated", async () => {
   const { LeaderboardClient } = loadSourceModule("src/leaderboard.js");
-  let authHeader = "";
+  const authHeaders = [];
   const client = new LeaderboardClient({
     endpoint: "https://scores.example.dev",
     tokenProvider: () => "token-123",
     fetchImpl: async (url, options = {}) => {
-      authHeader = options.headers.Authorization;
+      authHeaders.push(options.headers.Authorization || "");
       return {
         ok: true,
         json: async () => ({ entries: [], overallHighScore: 0 }),
@@ -73,7 +73,8 @@ test("leaderboard client sends bearer token when authenticated", async () => {
     },
   });
 
+  await client.load();
   await client.submit({ name: "Ray", score: 24 });
 
-  assert.equal(authHeader, "Bearer token-123");
+  assert.deepEqual(authHeaders, ["Bearer token-123", "Bearer token-123"]);
 });

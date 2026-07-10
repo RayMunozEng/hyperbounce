@@ -18,9 +18,9 @@ This Worker backs the public top-10 leaderboard when the game is hosted on GitHu
 
 The game calls:
 
-- `GET /leaderboard`
+- `GET /leaderboard` (public board; an authenticated request also receives its private saved `playerName`)
 - `POST /leaderboard` with `{ "name": "Ray", "score": 42 }` and `Authorization: Bearer <supabase-access-token>`
 
-Each authenticated account keeps one personal best. D1 performs an atomic upsert, then the Worker returns the top 10 without exposing Supabase user IDs.
+Each authenticated account keeps one name and personal best. D1 performs an atomic upsert, then the Worker returns the top 10 without exposing Supabase user IDs or email addresses.
 
 The board is appropriate for a casual portfolio game: identity is verified, inputs are sanitized, and one account cannot occupy several slots. Scores still originate in browser gameplay, so a determined user can fabricate a score. A competitive leaderboard would need server-authoritative gameplay or replay validation.

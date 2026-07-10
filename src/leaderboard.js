@@ -84,6 +84,7 @@ export function normalizeLeaderboardPayload(payload = {}) {
     return {
         entries,
         overallHighScore: Math.max(clampScore(payload.overallHighScore), resolveOverallHighScore(entries)),
+        playerName: sanitizeLeaderboardName(payload.playerName),
         accepted: Boolean(payload.accepted),
         rank: Number.isFinite(Number(payload.rank)) ? Number(payload.rank) : null
     };
@@ -143,7 +144,10 @@ export class LeaderboardClient {
 
         return this.fetch(this.url(), {
             method: "GET",
-            headers: { Accept: "application/json" }
+            headers: {
+                Accept: "application/json",
+                ...this.authHeaders()
+            }
         }).then((response) => this.parseResponse(response));
     }
 

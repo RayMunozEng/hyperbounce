@@ -87,6 +87,18 @@ async function readEntries(env) {
     return normalizeEntries(result && result.results ? result.results : []);
 }
 
+async function readPersonalEntry(env, userId) {
+    return env.HYPERBOUNCE_DB
+        .prepare(`
+            SELECT name, score
+            FROM hyperbounce_scores
+            WHERE user_id = ?1
+            LIMIT 1
+        `)
+        .bind(String(userId))
+        .first();
+}
+
 async function upsertPersonalBest(env, entry) {
     await env.HYPERBOUNCE_DB
         .prepare(`
@@ -178,7 +190,20 @@ export default {
 
         if (request.method === "GET") {
             const entries = await readEntries(env);
-            return jsonResponse(request, env, payload(entries));
+            const token = resolveBearerToken(request);
+
+            if (!token) return jsonResponse(request, env, payload(entries));
+
+            const authResult = await verifySupabaseUser(request, env);
+
+            if (!authResult.ok) {
+                return jsonResponse(request, env, authResult.body, authResult.status);
+            }
+
+            const personalEntry = await readPersonalEntry(env, authResult.user.id);
+            return jsonResponse(request, env, payload(entries, {
+                playerName: personalEntry ? sanitizeName(personalEntry.name) : ""
+            }));
         }
 
         if (request.method !== "POST") {
@@ -211,13 +236,15 @@ export default {
         }
 
         await upsertPersonalBest(env, submitted);
+        const personalEntry = await readPersonalEntry(env, submitted.userId);
         const rankedEntries = await readEntries(env);
         const rankIndex = rankedEntries.findIndex((entry) => entry.userId === submitted.userId);
         const accepted = rankIndex >= 0 && rankIndex < LEADERBOARD_LIMIT;
 
         return jsonResponse(request, env, payload(rankedEntries, {
             accepted,
-            rank: accepted ? rankIndex + 1 : null
+            rank: accepted ? rankIndex + 1 : null,
+            playerName: personalEntry ? sanitizeName(personalEntry.name) : ""
         }));
     }
 };

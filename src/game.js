@@ -120,6 +120,7 @@ export default class Game {
         this.overallHighScore = resolveOverallHighScore();
         this.lastCelebratedOverallScore = 0;
         this.leaderboardEntries = [];
+        this.leaderboardName = "";
         this.score = 0;
         this.multiplier = 1;
         this.speed = GAME_CONFIG.run.baseSpeed;
@@ -477,6 +478,7 @@ export default class Game {
         const qualifiesForLeaderboard = this.canSubmitLeaderboardScore ?
             this.canSubmitLeaderboardScore(this.score) :
             false;
+        const hasLeaderboardName = Boolean(this.leaderboardName);
 
         if (isNewHighScore) {
             this.highScore = this.score;
@@ -510,8 +512,11 @@ export default class Game {
             overallHighScore: this.overallHighScore,
             isNewHighScore,
             isAllTimeHighScore,
-            qualifiesForLeaderboard
+            qualifiesForLeaderboard: qualifiesForLeaderboard && !hasLeaderboardName
         });
+        if (qualifiesForLeaderboard && hasLeaderboardName) {
+            this.submitLeaderboardScore(null, this.leaderboardName);
+        }
     }
 
     toggleSound() {
@@ -721,8 +726,9 @@ export default class Game {
             });
     }
 
-    applyLeaderboard({ entries = [], overallHighScore = 0 } = {}) {
+    applyLeaderboard({ entries = [], overallHighScore = 0, playerName = "" } = {}) {
         this.leaderboardEntries = entries;
+        this.leaderboardName = String(playerName || "");
         this.overallHighScore = resolveOverallHighScore(overallHighScore);
         this.lastCelebratedOverallScore = Math.max(
             Number(this.lastCelebratedOverallScore) || 0,
@@ -746,11 +752,15 @@ export default class Game {
         if (this.authClient.subscribe) {
             this.authSubscription = this.authClient.subscribe((event, session) => {
                 this.applyAuthSession(session, event === "SIGNED_IN" ? "Signed in" : "");
+                if (session && event === "SIGNED_IN") this.loadLeaderboard();
             });
         }
 
         return this.authClient.loadSession()
-            .then((session) => this.applyAuthSession(session))
+            .then((session) => {
+                this.applyAuthSession(session);
+                return session ? this.loadLeaderboard().then(() => session) : session;
+            })
             .catch(() => {
                 this.hud.setAuthState({
                     isConfigured: true,
@@ -770,6 +780,7 @@ export default class Game {
             email,
             message: message || (isSignedIn ? "Signed in" : "Sign in to save top scores.")
         });
+        if (!isSignedIn) this.leaderboardName = "";
 
         return session;
     }
@@ -856,7 +867,7 @@ export default class Game {
             });
     }
 
-    submitLeaderboardScore(event) {
+    submitLeaderboardScore(event, savedName = "") {
         if (event && event.preventDefault) event.preventDefault();
         if (!this.leaderboardClient || !this.leaderboardClient.isEnabled || !this.leaderboardClient.isEnabled()) {
             return Promise.resolve();
@@ -870,7 +881,7 @@ export default class Game {
             return Promise.resolve();
         }
 
-        const name = this.hud.readLeaderboardName();
+        const name = savedName || this.hud.readLeaderboardName();
         if (!name) {
             this.hud.setLeaderboardSubmitState({
                 status: "error",
