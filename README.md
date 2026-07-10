@@ -2,7 +2,7 @@
 
 Hyperbounce is a neon 3D arcade runner built with JavaScript and Three.js. Guide a bouncing energy core across incoming platforms, collect combo cores, and survive as the platform spacing, movement, and tempo become less forgiving.
 
-[Play Hyperbounce](https://raymunozeng.github.io/Hyperbounce/)
+[Play Hyperbounce](https://raymunozeng.github.io/hyperbounce/)
 
 ![Hyperbounce title screen](docs/images/hyperbounce-menu.png)
 

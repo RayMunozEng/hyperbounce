@@ -118,6 +118,7 @@ export default class Game {
             key: this.localStorageName
         });
         this.overallHighScore = resolveOverallHighScore();
+        this.lastCelebratedOverallScore = 0;
         this.leaderboardEntries = [];
         this.score = 0;
         this.multiplier = 1;
@@ -481,6 +482,12 @@ export default class Game {
             this.highScore = this.score;
             this.storage.setItem(this.localStorageName, String(this.highScore));
         }
+        if (isAllTimeHighScore) {
+            this.lastCelebratedOverallScore = Math.max(
+                Number(this.lastCelebratedOverallScore) || 0,
+                this.score
+            );
+        }
 
         this.state = UI_STATES.gameOver;
         this.bgm.shiftRate(
@@ -677,13 +684,17 @@ export default class Game {
     isAllTimeRecord(score) {
         const client = this.leaderboardClient;
         const hasLoadedRecord = Number(this.overallHighScore) > 0;
+        const recordToBeat = Math.max(
+            Number(this.overallHighScore) || 0,
+            Number(this.lastCelebratedOverallScore) || 0
+        );
 
         return Boolean(
             client &&
             client.isEnabled &&
             client.isEnabled() &&
             hasLoadedRecord &&
-            score > this.overallHighScore
+            score > recordToBeat
         );
     }
 
@@ -713,6 +724,10 @@ export default class Game {
     applyLeaderboard({ entries = [], overallHighScore = 0 } = {}) {
         this.leaderboardEntries = entries;
         this.overallHighScore = resolveOverallHighScore(overallHighScore);
+        this.lastCelebratedOverallScore = Math.max(
+            Number(this.lastCelebratedOverallScore) || 0,
+            this.overallHighScore
+        );
         if (this.hud.setLeaderboardAvailability) this.hud.setLeaderboardAvailability(true);
         this.hud.setLeaderboard({
             entries: this.leaderboardEntries,

@@ -862,6 +862,17 @@ test("game uses the exclusive all-time fanfare when the online record falls", ()
   assert.deepEqual(calls.filter((call) => call[0] === "recordCelebrationStart"), [["recordCelebrationStart"]]);
   assert.deepEqual(calls.filter((call) => call[0] === "recordCelebrationStop"), []);
   assert.deepEqual(calls.filter((call) => call[0] === "showGameOver"), [["showGameOver", true, true]]);
+
+  game.score = 54;
+  Game.prototype.end.call(game);
+
+  assert.deepEqual(calls.filter((call) => call[0] === "allTimeFanfare"), [["allTimeFanfare"]]);
+  assert.deepEqual(calls.filter((call) => call[0] === "recordCelebrationStart"), [["recordCelebrationStart"]]);
+  assert.deepEqual(calls.filter((call) => call[0] === "recordCelebrationStop"), [["recordCelebrationStop"]]);
+  assert.deepEqual(calls.filter((call) => call[0] === "showGameOver"), [
+    ["showGameOver", true, true],
+    ["showGameOver", false, false],
+  ]);
 });
 
 test("game prompts for a leaderboard name when the score qualifies", () => {

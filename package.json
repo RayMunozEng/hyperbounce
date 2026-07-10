@@ -14,13 +14,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RayMunozEng/Hyperbounce.git"
+    "url": "git+https://github.com/RayMunozEng/hyperbounce.git"
   },
-  "homepage": "https://raymunozeng.github.io/Hyperbounce/",
+  "homepage": "https://raymunozeng.github.io/hyperbounce/",
   "author": "Ray Munoz",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/RayMunozEng/Hyperbounce/issues"
+    "url": "https://github.com/RayMunozEng/hyperbounce/issues"
   },
   "engines": {
     "node": ">=18"

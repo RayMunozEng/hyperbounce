@@ -50,6 +50,15 @@ test("public metadata and optional service configuration are deployment-ready", 
   assert.match(license, /ISC License/);
 });
 
+test("public project links use the canonical lowercase Pages path", () => {
+  const packageJson = JSON.parse(read("package.json"));
+  const publicCopy = [read("index.html"), read("README.md"), JSON.stringify(packageJson)].join("\n");
+
+  assert.equal(packageJson.homepage, "https://raymunozeng.github.io/hyperbounce/");
+  assert.match(publicCopy, /https:\/\/raymunozeng\.github\.io\/hyperbounce\//);
+  assert.doesNotMatch(publicCopy, /github\.io\/Hyperbounce\//);
+});
+
 test("the staged site contains runtime assets without development internals", () => {
   const { stageSite } = require("../scripts/stage-pages.cjs");
   const outputPath = fs.mkdtempSync(path.join(os.tmpdir(), "hyperbounce-pages-"));
