@@ -745,12 +745,14 @@ export default class Game {
         if (!this.authClient || !this.hud || !this.hud.setAuthState) return Promise.resolve(null);
 
         const isConfigured = this.authClient.isConfigured && this.authClient.isConfigured();
+        let receivedAuthEvent = false;
 
         this.hud.setAuthState({ isConfigured });
         if (!isConfigured) return Promise.resolve(null);
 
         if (this.authClient.subscribe) {
             this.authSubscription = this.authClient.subscribe((event, session) => {
+                receivedAuthEvent = true;
                 this.applyAuthSession(session, event === "SIGNED_IN" ? "Signed in" : "");
                 if (session && event === "SIGNED_IN") this.loadLeaderboard();
             });
@@ -758,6 +760,8 @@ export default class Game {
 
         return this.authClient.loadSession()
             .then((session) => {
+                if (receivedAuthEvent) return session;
+
                 this.applyAuthSession(session);
                 return session ? this.loadLeaderboard().then(() => session) : session;
             })

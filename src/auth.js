@@ -34,6 +34,7 @@ export class SupabaseAuthClient {
         this.supabaseFactory = supabaseFactory || (windowObj && windowObj.supabase) || null;
         this.client = this.createClient();
         this.session = null;
+        this.sessionRevision = 0;
     }
 
     createClient() {
@@ -56,12 +57,16 @@ export class SupabaseAuthClient {
 
     loadSession() {
         if (!this.isConfigured()) return Promise.resolve(null);
+        const revisionAtRequest = this.sessionRevision;
 
         return this.client.auth.getSession()
             .then((result) => {
                 const error = resolveAuthError(result);
                 if (error) throw error;
+                if (this.sessionRevision !== revisionAtRequest) return this.session;
+
                 this.session = result && result.data ? result.data.session : null;
+                this.sessionRevision += 1;
                 return this.session;
             });
     }
@@ -70,6 +75,7 @@ export class SupabaseAuthClient {
         if (!this.isConfigured() || !this.client.auth.onAuthStateChange) return null;
 
         return this.client.auth.onAuthStateChange((event, session) => {
+            this.sessionRevision += 1;
             this.session = session || null;
             handler(event, this.session);
         });
@@ -115,6 +121,7 @@ export class SupabaseAuthClient {
             .then((result) => {
                 const error = resolveAuthError(result);
                 if (error) throw error;
+                this.sessionRevision += 1;
                 this.session = null;
                 return result;
             });

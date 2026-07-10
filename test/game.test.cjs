@@ -1050,6 +1050,62 @@ test("game asks players to sign in before saving leaderboard scores", async () =
   assert.deepEqual(calls, [["state", "error", "Sign in first"]]);
 });
 
+test("game keeps a sign-in event authoritative over a stale guest startup response", async () => {
+  const { default: Game } = loadSourceModule("src/game.js");
+  const { SupabaseAuthClient } = loadSourceModule("src/auth.js");
+  let resolveInitialSession;
+  let authStateHandler;
+  let leaderboardLoads = 0;
+  const authStates = [];
+  const authClient = new SupabaseAuthClient({
+    url: "https://project.supabase.co",
+    anonKey: "anon",
+    supabaseFactory: {
+      createClient() {
+        return {
+          auth: {
+            getSession() {
+              return new Promise((resolve) => {
+                resolveInitialSession = resolve;
+              });
+            },
+            onAuthStateChange(handler) {
+              authStateHandler = handler;
+              return { data: { subscription: { unsubscribe() {} } } };
+            },
+          },
+        };
+      },
+    },
+  });
+  const game = {
+    authClient,
+    hud: {
+      setAuthState(state) {
+        authStates.push(state);
+      },
+    },
+    loadLeaderboard() {
+      leaderboardLoads += 1;
+      return Promise.resolve();
+    },
+  };
+  const signedInSession = {
+    access_token: "new-token",
+    user: { email: "ray@example.com" },
+  };
+
+  Object.setPrototypeOf(game, Game.prototype);
+  const initializing = Game.prototype.initAuth.call(game);
+  authStateHandler("SIGNED_IN", signedInSession);
+  resolveInitialSession({ data: { session: null }, error: null });
+  await initializing;
+
+  assert.equal(authStates[authStates.length - 1].isSignedIn, true);
+  assert.equal(authStates[authStates.length - 1].email, "ray@example.com");
+  assert.equal(leaderboardLoads, 1);
+});
+
 test("game resolves personal and overall best scores from production state", () => {
   const {
     resolveInitialHighScore,

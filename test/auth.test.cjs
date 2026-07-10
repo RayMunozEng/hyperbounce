@@ -86,3 +86,45 @@ test("auth client exposes the current bearer token", async () => {
   assert.equal(session.user.email, "ray@example.com");
   assert.equal(client.getAccessToken(), "token-123");
 });
+
+test("auth client keeps a newer sign-in event over a stale guest session response", async () => {
+  const { SupabaseAuthClient } = loadSourceModule("src/auth.js");
+  let resolveInitialSession;
+  let authStateHandler;
+  const client = new SupabaseAuthClient({
+    url: "https://project.supabase.co",
+    anonKey: "anon",
+    supabaseFactory: {
+      createClient() {
+        return {
+          auth: {
+            getSession() {
+              return new Promise((resolve) => {
+                resolveInitialSession = resolve;
+              });
+            },
+            onAuthStateChange(handler) {
+              authStateHandler = handler;
+              return { data: { subscription: { unsubscribe() {} } } };
+            },
+          },
+        };
+      },
+    },
+  });
+  const signedInSession = {
+    access_token: "new-token",
+    user: { email: "ray@example.com" },
+  };
+
+  client.subscribe(() => {});
+  const loadingSession = client.loadSession();
+  authStateHandler("SIGNED_IN", signedInSession);
+  resolveInitialSession({ data: { session: null }, error: null });
+
+  const resolvedSession = await loadingSession;
+
+  assert.equal(resolvedSession, signedInSession);
+  assert.equal(client.getAccessToken(), "new-token");
+  assert.equal(client.getUserEmail(), "ray@example.com");
+});
