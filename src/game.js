@@ -4,9 +4,11 @@ import { Howl } from "howler";
 import {
     CrossfadeMusic,
     createComboSfx,
+    createDeathSfx,
     createHighScoreSfx,
     createIntroSfx,
     createJumpSfx,
+    createLaunchSfx,
     createOrbSfx,
     createUiSfx
 } from "./audio";
@@ -16,7 +18,12 @@ import { didCollect, didLand } from "./collision";
 import { GAME_CONFIG, PLATFORM_TYPES, COLORS, UI_STATES } from "./config";
 import { InputController } from "./input";
 import { Hud } from "./hud";
+import { SupabaseAuthClient } from "./auth";
+import { LeaderboardClient } from "./leaderboard";
+import { AdaptiveRenderQuality } from "./render_quality";
+import { RecordCelebration } from "./record_celebration";
 import { resolveLandingScore } from "./scoring";
+import { resolvePlatformBouncePhase } from "./tempo";
 
 const MENU_MUSIC_VOLUME = 0.22;
 const RUN_MUSIC_VOLUME = 0.55;
@@ -30,56 +37,45 @@ const INTRO_WIPE_DELAY_MS = 2920;
 const INTRO_STAR_DELAY_MS = 3060;
 const INTRO_MENU_READY_MS = 4700;
 const TWO_PI = Math.PI * 2;
-export const TEMP_TEST_HIGH_SCORE = 10;
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
 }
 
-export function resetSavedHighScoreIfRequested({ storage, location, history, key }) {
-    if (!storage || !location || !location.href) return false;
-
-    let url;
-
-    try {
-        url = new URL(location.href);
-    } catch (error) {
-        return false;
-    }
-
-    if (url.searchParams.get("resetBest") !== "1") return false;
-
-    storage.removeItem(key);
-    url.searchParams.delete("resetBest");
-
-    if (history && typeof history.replaceState === "function") {
-        const cleanUrl = `${url.pathname}${url.search}${url.hash}`;
-        history.replaceState(null, "", cleanUrl || "/");
-    }
-
-    return true;
-}
-
-function isTemporaryHighScoreTesting() {
-    return typeof TEMP_TEST_HIGH_SCORE === "number";
-}
-
 export function resolveInitialHighScore({ storage, key }) {
-    if (isTemporaryHighScoreTesting()) return TEMP_TEST_HIGH_SCORE;
+    const score = storage && typeof storage.getItem === "function" ?
+        Math.floor(Number(storage.getItem(key))) :
+        0;
 
-    return Number(storage.getItem(key)) || 0;
+    return Number.isFinite(score) && score > 0 ? score : 0;
+}
+
+export function resolveOverallHighScore(loadedScore = 0) {
+    const score = Math.floor(Number(loadedScore));
+
+    return Number.isFinite(score) && score > 0 ? score : 0;
 }
 
 export function createRendererOptions() {
     return {
-        antialias: true,
-        alpha: true,
+        antialias: false,
+        alpha: false,
+        stencil: false,
         powerPreference: "high-performance"
     };
 }
 
-export function resolveRendererPixelRatio(devicePixelRatio = 1) {
-    return Math.min(devicePixelRatio || 1, 1.6);
+const MAX_RENDER_PIXELS = 1600000;
+const MAX_RENDER_PIXEL_RATIO = 1.25;
+
+export function resolveRendererPixelRatio(devicePixelRatio = 1, width = 0, height = 0) {
+    const displayRatio = Math.max(0.5, Number(devicePixelRatio) || 1);
+    const viewportPixels = Math.max(0, Number(width)) * Math.max(0, Number(height));
+    const pixelBudgetRatio = viewportPixels > 0 ?
+        Math.sqrt(MAX_RENDER_PIXELS / viewportPixels) :
+        MAX_RENDER_PIXEL_RATIO;
+
+    return Math.max(0.5, Math.min(displayRatio, MAX_RENDER_PIXEL_RATIO, pixelBudgetRatio));
 }
 
 export function createBloomSettings() {
@@ -91,23 +87,38 @@ export function createBloomSettings() {
 }
 
 export default class Game {
-    constructor({ THREEImpl = window.THREE, doc = document, storage = localStorage, HowlClass = Howl } = {}) {
+    constructor({
+        THREEImpl = window.THREE,
+        doc = document,
+        storage = localStorage,
+        HowlClass = Howl,
+        leaderboardClient = null,
+        authClient = null
+    } = {}) {
         window.game = this;
         this.THREE = THREEImpl;
         this.HowlClass = HowlClass;
         this.document = doc;
         this.storage = storage;
-        this.localStorageName = "hyperbouncescore";
-        resetSavedHighScoreIfRequested({
-            storage: this.storage,
-            location: this.document.defaultView && this.document.defaultView.location,
-            history: this.document.defaultView && this.document.defaultView.history,
-            key: this.localStorageName
+        this.windowObj = this.document.defaultView || window;
+        this.leaderboardClient = leaderboardClient || new LeaderboardClient({
+            windowObj: this.windowObj
         });
+        this.authClient = authClient || new SupabaseAuthClient({
+            windowObj: this.windowObj
+        });
+        if (this.leaderboardClient && this.leaderboardClient.setTokenProvider) {
+            this.leaderboardClient.setTokenProvider(() =>
+                this.authClient && this.authClient.getAccessToken ? this.authClient.getAccessToken() : ""
+            );
+        }
+        this.localStorageName = "hyperbouncescore";
         this.highScore = resolveInitialHighScore({
             storage: this.storage,
             key: this.localStorageName
         });
+        this.overallHighScore = resolveOverallHighScore();
+        this.leaderboardEntries = [];
         this.score = 0;
         this.multiplier = 1;
         this.speed = GAME_CONFIG.run.baseSpeed;
@@ -118,6 +129,9 @@ export default class Game {
         this.launchIntroSeconds = GAME_CONFIG.launch.introSeconds;
         this.launchCountdownSeconds = GAME_CONFIG.launch.countdownSeconds;
         this.musicPulsePhase = 0;
+        this.musicPulse = { intensity: 0, tempo: 1 };
+        this.renderQuality = new AdaptiveRenderQuality();
+        this.renderScale = this.renderQuality.scale;
         this.isMuted = false;
         this.cameraTarget = new this.THREE.Vector3();
 
@@ -131,15 +145,28 @@ export default class Game {
         this.restart = this.restart.bind(this);
         this.toggleSound = this.toggleSound.bind(this);
         this.playUiHoverSfx = this.playUiHoverSfx.bind(this);
+        this.submitLeaderboardScore = this.submitLeaderboardScore.bind(this);
+        this.signInGoogle = this.signInGoogle.bind(this);
+        this.sendEmailLink = this.sendEmailLink.bind(this);
+        this.signOut = this.signOut.bind(this);
         this.onResize = this.onResize.bind(this);
 
         this.hud.bindControls({
             start: this.start,
             retry: this.restart,
             sound: this.toggleSound,
+            submitScore: this.submitLeaderboardScore,
+            signInGoogle: this.signInGoogle,
+            sendEmailLink: this.sendEmailLink,
+            signOut: this.signOut,
             hover: this.playUiHoverSfx
         });
-        this.hud.showStart({ highScore: this.highScore });
+        this.hud.showStart({
+            highScore: this.highScore,
+            overallHighScore: this.overallHighScore
+        });
+        this.initAuth();
+        this.loadLeaderboard();
         this.scheduleIntroSequence();
         this.document.defaultView.addEventListener("resize", this.onResize);
         requestAnimationFrame(this.animate);
@@ -155,28 +182,34 @@ export default class Game {
         this.musicShiftSeconds = MUSIC_RATE_SHIFT_SECONDS;
         this.bgm = new CrossfadeMusic({
             HowlClass: this.HowlClass,
-            src: ["./src/sounds/neon-runner.wav"],
+            src: ["./src/sounds/neon-runner.mp3"],
             volume: this.musicRunVolume,
             fadeSeconds: 4
         });
         this.bgm.play(this.musicMenuVolume);
         this.bounceSFX = createJumpSfx({ HowlClass: this.HowlClass });
+        this.deathSFX = createDeathSfx({ HowlClass: this.HowlClass });
         this.orbSFX = createOrbSfx({ HowlClass: this.HowlClass });
         this.introSFX = createIntroSfx({ HowlClass: this.HowlClass });
         this.uiSFX = createUiSfx({ HowlClass: this.HowlClass });
         this.comboSFX = createComboSfx({ HowlClass: this.HowlClass });
+        this.launchSFX = createLaunchSfx({ HowlClass: this.HowlClass });
         this.highScoreSFX = createHighScoreSfx({ HowlClass: this.HowlClass });
     }
 
     setupScene() {
-        this.clock = new this.THREE.Clock();
+        this.clock = new this.THREE.Timer();
+        this.clock.connect(this.document);
         this.scene = new this.THREE.Scene();
         this.scene2 = this.scene;
         this.assets = createSharedAssets(this.THREE);
 
+        const viewportWidth = this.windowObj.innerWidth;
+        const viewportHeight = this.windowObj.innerHeight;
+
         this.camera = new this.THREE.PerspectiveCamera(
             GAME_CONFIG.camera.fov,
-            window.innerWidth / window.innerHeight,
+            viewportWidth / viewportHeight,
             0.1,
             100
         );
@@ -209,14 +242,17 @@ export default class Game {
             THREE: this.THREE,
             scene: this.scene
         });
+        this.recordCelebration = new RecordCelebration({
+            THREE: this.THREE,
+            texture: this.assets.textures.star
+        });
+        this.recordCelebration.resize(viewportWidth, viewportHeight);
 
         this.renderer = new this.THREE.WebGLRenderer(createRendererOptions());
         this.renderer.autoClear = false;
         this.renderer.setClearColor(COLORS.background);
-        this.renderer.setPixelRatio(resolveRendererPixelRatio(window.devicePixelRatio));
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.gammaInput = true;
-        this.renderer.gammaOutput = true;
+        this.resizeRenderer(viewportWidth, viewportHeight);
+    this.renderer.outputColorSpace = this.THREE.LinearSRGBColorSpace;
         this.renderer.toneMappingExposure = Math.pow(0.9, 4.0);
         this.document.body.appendChild(this.renderer.domElement);
         this.canvas = this.renderer.domElement;
@@ -247,7 +283,7 @@ export default class Game {
         if (this.THREE.UnrealBloomPass) {
             const bloomSettings = createBloomSettings();
             const bloom = new this.THREE.UnrealBloomPass(
-                new this.THREE.Vector2(window.innerWidth, window.innerHeight),
+                new this.THREE.Vector2(this.windowObj.innerWidth, this.windowObj.innerHeight),
                 1.35,
                 0.36,
                 0.75
@@ -255,9 +291,10 @@ export default class Game {
             bloom.threshold = bloomSettings.threshold;
             bloom.strength = bloomSettings.strength;
             bloom.radius = bloomSettings.radius;
-            bloom.renderToScreen = true;
             composer.addPass(bloom);
         }
+
+        if (this.THREE.OutputPass) composer.addPass(new this.THREE.OutputPass());
 
         return composer;
     }
@@ -266,7 +303,9 @@ export default class Game {
         this.score = 0;
         this.multiplier = 1;
         this.speed = GAME_CONFIG.run.baseSpeed;
+        this.targetPlatformGap = Math.abs(GAME_CONFIG.platform.startZ);
         this.musicPulsePhase = 0;
+        if (this.recordCelebration) this.recordCelebration.stop();
         this.player.reset();
         this.platformManager.reset();
         this.setGameplayObjectsVisible(showGameplayObjects);
@@ -278,6 +317,7 @@ export default class Game {
         this.hud.updateRun({
             score: this.score,
             highScore: this.highScore,
+            overallHighScore: this.overallHighScore,
             multiplier: this.multiplier
         });
     }
@@ -327,6 +367,7 @@ export default class Game {
         this.hud.showLaunchSequence({
             score: this.score,
             highScore: this.highScore,
+            overallHighScore: this.overallHighScore,
             multiplier: this.multiplier,
             countdown: ""
         });
@@ -353,6 +394,7 @@ export default class Game {
         if (countdownElapsed < this.launchCountdownSeconds && countdownValue !== this.launchLastCountdown) {
             this.launchLastCountdown = countdownValue;
             this.hud.updateLaunchCountdown(String(countdownValue));
+            this.playLaunchCountdownCue(countdownValue);
         }
 
         if (countdownElapsed >= this.launchCountdownSeconds) {
@@ -364,6 +406,9 @@ export default class Game {
         if (this.input && this.input.consumeMovement) {
             this.input.consumeMovement();
         }
+        if (this.launchSFX && this.launchSFX.start) {
+            this.launchSFX.start.play();
+        }
         this.hud.hideLaunchCountdown();
         this.beginPlaying({ captureInput: false });
         if (this.input && this.input.capturePointer) {
@@ -373,11 +418,13 @@ export default class Game {
 
     beginPlaying({ captureInput = true } = {}) {
         this.platformManager.releaseLaunchPad();
+        this.targetPlatformGap = this.resolveTargetPlatformGap();
         this.state = UI_STATES.playing;
         if (captureInput) this.input.start(this.canvas);
         this.hud.showPlaying({
             score: this.score,
             highScore: this.highScore,
+            overallHighScore: this.overallHighScore,
             multiplier: this.multiplier
         });
     }
@@ -403,32 +450,60 @@ export default class Game {
         if (this.uiSFX && this.uiSFX.hover) this.uiSFX.hover.play();
     }
 
+    playLaunchCountdownCue(value) {
+        const cue = this.launchSFX && this.launchSFX.countdown;
+        const rates = { 3: 0.9, 2: 1, 1: 1.12 };
+
+        if (!cue) return;
+        if (typeof cue.rate === "function") cue.rate(rates[value] || 1);
+        cue.play();
+    }
+
     triggerDeath() {
         if (this.state !== UI_STATES.playing) return;
 
         this.state = "dying";
         this.input.stop();
         this.player.beginDeath();
+        this.deathSFX.play();
     }
 
     end() {
         const isNewHighScore = this.score > this.highScore;
+        const isAllTimeHighScore = this.isAllTimeRecord ?
+            this.isAllTimeRecord(this.score) :
+            false;
+        const qualifiesForLeaderboard = this.canSubmitLeaderboardScore ?
+            this.canSubmitLeaderboardScore(this.score) :
+            false;
 
-        if (isNewHighScore && !isTemporaryHighScoreTesting()) {
+        if (isNewHighScore) {
             this.highScore = this.score;
             this.storage.setItem(this.localStorageName, String(this.highScore));
         }
 
         this.state = UI_STATES.gameOver;
         this.bgm.shiftRate(
-            isNewHighScore ? this.musicHighScoreRate : this.musicDarkRate,
+            isNewHighScore || isAllTimeHighScore ? this.musicHighScoreRate : this.musicDarkRate,
             this.musicShiftSeconds
         );
-        if (isNewHighScore) this.playHighScoreCelebration();
+        if (isNewHighScore || isAllTimeHighScore) {
+            this.playHighScoreCelebration(isAllTimeHighScore ? "all-time" : "personal");
+        }
+        if (this.recordCelebration) {
+            if (isAllTimeHighScore) {
+                this.recordCelebration.start();
+            } else {
+                this.recordCelebration.stop();
+            }
+        }
         this.hud.showGameOver({
             score: this.score,
             highScore: this.highScore,
-            isNewHighScore
+            overallHighScore: this.overallHighScore,
+            isNewHighScore,
+            isAllTimeHighScore,
+            qualifiesForLeaderboard
         });
     }
 
@@ -436,16 +511,22 @@ export default class Game {
         this.isMuted = !this.isMuted;
         this.bgm.mute(this.isMuted);
         this.bounceSFX.mute(this.isMuted);
+        this.deathSFX.mute(this.isMuted);
         this.orbSFX.mute(this.isMuted);
         this.introSFX.mute(this.isMuted);
         if (this.uiSFX) this.uiSFX.mute(this.isMuted);
         if (this.comboSFX) this.comboSFX.mute(this.isMuted);
+        if (this.launchSFX) this.launchSFX.mute(this.isMuted);
         if (this.highScoreSFX) this.highScoreSFX.mute(this.isMuted);
         this.hud.setSoundMuted(this.isMuted);
     }
 
-    animate() {
-        const delta = Math.min(this.clock.getDelta(), 0.033);
+    animate(timestamp) {
+        this.clock.update(timestamp);
+        const rawDelta = this.clock.getDelta();
+        const delta = Math.min(rawDelta, 0.033);
+
+        this.updateRenderQuality(rawDelta);
 
         if (this.state === UI_STATES.playing) {
             this.updatePlaying(delta);
@@ -458,6 +539,7 @@ export default class Game {
 
         this.starfield.update(delta, Math.max(this.speed, 0.16));
         this.spaceTraffic.update(delta, Math.max(this.speed, 0.16));
+        if (this.recordCelebration) this.recordCelebration.update(delta);
         this.cameraLag();
         this.render();
         requestAnimationFrame(this.animate);
@@ -466,13 +548,39 @@ export default class Game {
     updatePlaying(delta) {
         const musicPulse = this.resolveMusicPulse(delta);
 
-        this.player.syncRunSpeed(this.speed);
-        this.player.update(delta, this.input.consumeMovement(), true);
+        this.player.syncRunSpeed(this.speed, this.targetPlatformGap);
         this.platformManager.update(delta, this.speed, musicPulse);
+        const bouncePhase = this.resolveTargetPlatformPhase();
+
+        this.player.update(
+            delta,
+            this.input.consumeMovement(),
+            true,
+            bouncePhase
+        );
 
         if (this.player.landedThisFrame) {
             this.resolveLanding();
+            const nextPhase = this.resolveTargetPlatformPhase();
+
+            if (Number.isFinite(nextPhase) && this.player.syncBouncePhase) {
+                this.player.syncBouncePhase(nextPhase);
+            }
         }
+    }
+
+    resolveTargetPlatformPhase() {
+        const platform = this.platformManager && typeof this.platformManager.current === "function" ?
+            this.platformManager.current() :
+            null;
+
+        if (!platform || !platform.group || !platform.group.position) return null;
+
+        return resolvePlatformBouncePhase(
+            platform.group.position.z,
+            platform.travelGap,
+            GAME_CONFIG.platform.landingZ
+        );
     }
 
     resolveMusicPulse(delta) {
@@ -493,10 +601,10 @@ export default class Game {
         const beatDistance = Math.min(beatPosition, 1 - beatPosition);
         const intensity = Math.pow(clamp(1 - (beatDistance / 0.34), 0, 1), 2.15);
 
-        return {
-            intensity,
-            tempo
-        };
+        const pulse = this.musicPulse || (this.musicPulse = { intensity: 0, tempo: 1 });
+        pulse.intensity = intensity;
+        pulse.tempo = tempo;
+        return pulse;
     }
 
     resolveLanding() {
@@ -534,6 +642,7 @@ export default class Game {
         this.playOrbOutcomeSfx({ hasPickup, hitPickup });
         this.maybeShowMultiplierMilestone(previousMultiplier, this.multiplier);
         this.platformManager.spawnNext(this.score);
+        this.targetPlatformGap = this.resolveTargetPlatformGap();
         this.speed = Math.min(
             GAME_CONFIG.run.maxSpeed,
             this.speed + GAME_CONFIG.run.speedGain
@@ -542,8 +651,242 @@ export default class Game {
         this.hud.updateRun({
             score: this.score,
             highScore: this.highScore,
+            overallHighScore: this.overallHighScore,
             multiplier: this.multiplier
         });
+    }
+
+    resolveTargetPlatformGap() {
+        const platform = this.platformManager && typeof this.platformManager.current === "function" ?
+            this.platformManager.current() :
+            null;
+        const travelGap = Number(platform && platform.travelGap);
+
+        return travelGap > 0 ? travelGap : Math.abs(GAME_CONFIG.platform.startZ);
+    }
+
+    canSubmitLeaderboardScore(score) {
+        return Boolean(
+            this.leaderboardClient &&
+            this.leaderboardClient.isEnabled &&
+            this.leaderboardClient.isEnabled() &&
+            this.leaderboardClient.qualifies(score, this.leaderboardEntries)
+        );
+    }
+
+    isAllTimeRecord(score) {
+        const client = this.leaderboardClient;
+        const hasLoadedRecord = Number(this.overallHighScore) > 0;
+
+        return Boolean(
+            client &&
+            client.isEnabled &&
+            client.isEnabled() &&
+            hasLoadedRecord &&
+            score > this.overallHighScore
+        );
+    }
+
+    loadLeaderboard() {
+        if (!this.leaderboardClient || !this.leaderboardClient.isEnabled || !this.leaderboardClient.isEnabled()) {
+            this.leaderboardEntries = [];
+            this.overallHighScore = 0;
+            if (this.hud.setLeaderboardAvailability) this.hud.setLeaderboardAvailability(false);
+            return Promise.resolve();
+        }
+
+        if (this.hud.setLeaderboardAvailability) this.hud.setLeaderboardAvailability(true);
+
+        return this.leaderboardClient.load()
+            .then((leaderboard) => {
+                this.applyLeaderboard(leaderboard);
+            })
+            .catch(() => {
+                this.hud.setLeaderboard({
+                    entries: [],
+                    overallHighScore: 0,
+                    emptyMessage: "Leaderboard unavailable."
+                });
+            });
+    }
+
+    applyLeaderboard({ entries = [], overallHighScore = 0 } = {}) {
+        this.leaderboardEntries = entries;
+        this.overallHighScore = resolveOverallHighScore(overallHighScore);
+        if (this.hud.setLeaderboardAvailability) this.hud.setLeaderboardAvailability(true);
+        this.hud.setLeaderboard({
+            entries: this.leaderboardEntries,
+            overallHighScore: this.overallHighScore
+        });
+    }
+
+    initAuth() {
+        if (!this.authClient || !this.hud || !this.hud.setAuthState) return Promise.resolve(null);
+
+        const isConfigured = this.authClient.isConfigured && this.authClient.isConfigured();
+
+        this.hud.setAuthState({ isConfigured });
+        if (!isConfigured) return Promise.resolve(null);
+
+        if (this.authClient.subscribe) {
+            this.authSubscription = this.authClient.subscribe((event, session) => {
+                this.applyAuthSession(session, event === "SIGNED_IN" ? "Signed in" : "");
+            });
+        }
+
+        return this.authClient.loadSession()
+            .then((session) => this.applyAuthSession(session))
+            .catch(() => {
+                this.hud.setAuthState({
+                    isConfigured: true,
+                    isSignedIn: false,
+                    message: "Could not load account"
+                });
+            });
+    }
+
+    applyAuthSession(session, message = "") {
+        const isSignedIn = Boolean(session && session.access_token);
+        const email = this.authClient && this.authClient.getUserEmail ? this.authClient.getUserEmail() : "";
+
+        this.hud.setAuthState({
+            isConfigured: this.authClient && this.authClient.isConfigured ? this.authClient.isConfigured() : false,
+            isSignedIn,
+            email,
+            message: message || (isSignedIn ? "Signed in" : "Sign in to save top scores.")
+        });
+
+        return session;
+    }
+
+    signInGoogle() {
+        if (!this.authClient || !this.authClient.isConfigured || !this.authClient.isConfigured()) {
+            this.hud.setAuthState({ isConfigured: false });
+            return Promise.resolve();
+        }
+
+        this.hud.setAuthState({
+            isConfigured: true,
+            isSignedIn: false,
+            message: "Opening Google sign-in..."
+        });
+
+        return this.authClient.signInWithGoogle()
+            .catch(() => {
+                this.hud.setAuthState({
+                    isConfigured: true,
+                    isSignedIn: false,
+                    message: "Google sign-in failed"
+                });
+            });
+    }
+
+    sendEmailLink(event) {
+        if (event && event.preventDefault) event.preventDefault();
+
+        if (!this.authClient || !this.authClient.isConfigured || !this.authClient.isConfigured()) {
+            this.hud.setAuthState({ isConfigured: false });
+            return Promise.resolve();
+        }
+
+        const email = this.hud.readAuthEmail();
+
+        if (!email) {
+            this.hud.setAuthState({
+                isConfigured: true,
+                isSignedIn: false,
+                message: "Enter an email first"
+            });
+            return Promise.resolve();
+        }
+
+        this.hud.setAuthState({
+            isConfigured: true,
+            isSignedIn: false,
+            message: "Sending magic link..."
+        });
+
+        return this.authClient.sendMagicLink(email)
+            .then(() => {
+                this.hud.setAuthState({
+                    isConfigured: true,
+                    isSignedIn: false,
+                    message: "Check your email for the link"
+                });
+            })
+            .catch(() => {
+                this.hud.setAuthState({
+                    isConfigured: true,
+                    isSignedIn: false,
+                    message: "Could not send magic link"
+                });
+            });
+    }
+
+    signOut() {
+        if (!this.authClient || !this.authClient.isConfigured || !this.authClient.isConfigured()) {
+            this.hud.setAuthState({ isConfigured: false });
+            return Promise.resolve();
+        }
+
+        return this.authClient.signOut()
+            .then(() => this.applyAuthSession(null, "Signed out"))
+            .catch(() => {
+                this.hud.setAuthState({
+                    isConfigured: true,
+                    isSignedIn: true,
+                    email: this.authClient.getUserEmail ? this.authClient.getUserEmail() : "",
+                    message: "Could not sign out"
+                });
+            });
+    }
+
+    submitLeaderboardScore(event) {
+        if (event && event.preventDefault) event.preventDefault();
+        if (!this.leaderboardClient || !this.leaderboardClient.isEnabled || !this.leaderboardClient.isEnabled()) {
+            return Promise.resolve();
+        }
+
+        if (this.authClient && this.authClient.getAccessToken && !this.authClient.getAccessToken()) {
+            this.hud.setLeaderboardSubmitState({
+                status: "error",
+                message: "Sign in first"
+            });
+            return Promise.resolve();
+        }
+
+        const name = this.hud.readLeaderboardName();
+        if (!name) {
+            this.hud.setLeaderboardSubmitState({
+                status: "error",
+                message: "Enter a name first"
+            });
+            return Promise.resolve();
+        }
+
+        this.hud.setLeaderboardSubmitState({
+            status: "saving",
+            message: "Saving score..."
+        });
+
+        return this.leaderboardClient.submit({
+                name,
+                score: this.score
+            })
+            .then((result) => {
+                this.applyLeaderboard(result);
+                if (result.accepted) this.hud.showLeaderboardPrompt(false);
+                this.hud.setLeaderboardSubmitState({
+                    status: "success",
+                    message: result.accepted ? "Leaderboard updated" : "Score missed the top 10"
+                });
+            })
+            .catch(() => {
+                this.hud.setLeaderboardSubmitState({
+                    status: "error",
+                    message: "Could not save score"
+                });
+            });
     }
 
     maybeShowMultiplierMilestone(previousMultiplier, nextMultiplier) {
@@ -566,10 +909,14 @@ export default class Game {
         cue.play();
     }
 
-    playHighScoreCelebration() {
-        if (this.highScoreSFX && this.highScoreSFX.fanfare) {
-            this.highScoreSFX.fanfare.play();
-        }
+    playHighScoreCelebration(tier = "personal") {
+        if (!this.highScoreSFX) return;
+
+        const cue = tier === "all-time" && this.highScoreSFX.allTimeFanfare ?
+            this.highScoreSFX.allTimeFanfare :
+            this.highScoreSFX.fanfare;
+
+        if (cue) cue.play();
     }
 
     cameraLag() {
@@ -589,15 +936,49 @@ export default class Game {
         } else {
             this.renderer.render(this.scene, this.camera);
         }
+        if (this.recordCelebration) this.recordCelebration.render(this.renderer);
+    }
+
+    updateRenderQuality(rawDelta) {
+        const isActive = !this.document.hidden && (
+            this.state === UI_STATES.launching ||
+            this.state === UI_STATES.playing ||
+            this.state === "dying"
+        );
+        const nextScale = this.renderQuality.update(rawDelta, isActive);
+
+        if (nextScale === null) return false;
+
+        this.renderScale = nextScale;
+        this.resizeRenderer(this.windowObj.innerWidth, this.windowObj.innerHeight);
+        return true;
+    }
+
+    resizeRenderer(width, height) {
+        const basePixelRatio = resolveRendererPixelRatio(
+            this.windowObj.devicePixelRatio,
+            width,
+            height
+        );
+        const pixelRatio = Math.max(0.35, basePixelRatio * (this.renderScale || 1));
+
+        this.renderer.setPixelRatio(pixelRatio);
+        this.renderer.setSize(width, height);
+        if (this.composer && this.composer.setSize) {
+            if (this.composer.setPixelRatio) this.composer.setPixelRatio(pixelRatio);
+            this.composer.setSize(width, height);
+        }
+
+        return pixelRatio;
     }
 
     onResize() {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
+        const width = this.windowObj.innerWidth;
+        const height = this.windowObj.innerHeight;
 
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
-        this.renderer.setSize(width, height);
-        if (this.composer && this.composer.setSize) this.composer.setSize(width, height);
+        this.resizeRenderer(width, height);
+        if (this.recordCelebration) this.recordCelebration.resize(width, height);
     }
 }

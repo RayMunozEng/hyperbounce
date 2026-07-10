@@ -1,19 +1,24 @@
 import { COLORS, GAME_CONFIG, PLATFORM_TYPES } from "./config";
 import { createSharedAssets } from "./materials";
 
-const IMPACT_FEEDBACK_SECONDS = 0.38;
-const IMPACT_SHOCKWAVE_OPACITY = 0.12;
-const IMPACT_AFTERGLOW_OPACITY = 0.028;
-const DANGER_SHOCKWAVE_OPACITY = 0.17;
-const DANGER_AFTERGLOW_OPACITY = 0.045;
+const IMPACT_FEEDBACK_SECONDS = 0.62;
+const IMPACT_SHOCKWAVE_OPACITY = 0.28;
+const IMPACT_AFTERGLOW_OPACITY = 0.055;
+const DANGER_SHOCKWAVE_OPACITY = 0.34;
+const DANGER_AFTERGLOW_OPACITY = 0.08;
 const PICKUP_BASE_Y = 1.2;
 const PICKUP_CORE_SCALE = 0.92;
 const PICKUP_RING_BASE_SCALE = 1.12;
 const PICKUP_GLINT_BASE_SCALE = 1;
-const TOP_RAIL_BEAT_OPACITY_BOOST = 1.22;
-const TOP_RAIL_BEAT_HALO_BOOST = 2.15;
-const TOP_RAIL_LANDING_OPACITY_BOOST = 1.1;
-const TOP_RAIL_LANDING_HALO_BOOST = 2.35;
+const TOP_RAIL_BEAT_OPACITY_BOOST = 0.82;
+const TOP_RAIL_BEAT_HALO_BOOST = 0.9;
+const TOP_RAIL_LANDING_OPACITY_BOOST = 1.34;
+const TOP_RAIL_LANDING_HALO_BOOST = 0.45;
+const TOP_RAIL_MAX_OPACITY = 0.84;
+const TOP_RAIL_MAX_HALO_OPACITY = 0.31;
+const LANDING_ORBIT_DIM = 0.38;
+const LANDING_ORBIT_HALO_DIM = 0.68;
+const LANDING_BEACON_DIM = 0.45;
 const PLATFORM_COLOR_HUES = {
     standard: 0.53,
     multiplier: 0.84,
@@ -116,11 +121,10 @@ function setEmissiveIntensity(material, intensity) {
     material.emissiveIntensity = intensity;
 }
 
-function resolveBeatPulse(beatPulse = {}) {
-    return {
-        intensity: clamp(Number(beatPulse.intensity) || 0, 0, 1),
-        tempo: clamp(Number(beatPulse.tempo) || 1, 0.6, 3)
-    };
+function resolveBeatPulse(beatPulse = {}, target = {}) {
+    target.intensity = clamp(Number(beatPulse.intensity) || 0, 0, 1);
+    target.tempo = clamp(Number(beatPulse.tempo) || 1, 0.6, 3);
+    return target;
 }
 
 export default class Platform {
@@ -206,6 +210,13 @@ export default class Platform {
             assets.geometries.shockwave,
             assets.createShockwaveMaterial(0.24, COLORS.star)
         );
+        this.fadeMaterialList = [
+            this.pad.material,
+            this.hazard.material,
+            this.pickup.core.material,
+            this.pickup.ring.material,
+            this.pickup.glint.material
+        ];
 
         this.orbitBand.rotation.x = Math.PI / 2;
         this.orbitBandHalo.rotation.x = Math.PI / 2;
@@ -266,51 +277,29 @@ export default class Platform {
             this.assets.materials.platform.standard;
 
         this.pad.material = createFadeMaterial(sourceMaterial);
+        this.fadeMaterialList[0] = this.pad.material;
         this.setPadBrightness(0);
-    }
-
-    fadeMaterials() {
-        return [
-            this.pad.material,
-            this.orbitBand.material,
-            this.orbitBandHalo.material,
-            this.topRail.material,
-            this.topRailHalo.material,
-            this.topRailCross.material,
-            this.topRailCrossHalo.material,
-            this.beaconMaterial,
-            this.hazard.material,
-            this.pickup.core.material,
-            this.pickup.ring.material,
-            this.pickup.glint.material
-        ];
     }
 
     applyVisibilityFade() {
         this.visualFade = resolvePlatformFade(this.group.position.z) * this.launchReveal;
+        const landingBoost = this.resolveTopRailLandingBoost();
+        const orbitContrast = 1 - (landingBoost * LANDING_ORBIT_DIM);
+        const orbitHaloContrast = 1 - (landingBoost * LANDING_ORBIT_HALO_DIM);
+        const beaconContrast = 1 - (landingBoost * LANDING_BEACON_DIM);
 
-        this.fadeMaterials().forEach((material) => {
-            if (
-                material === this.orbitBand.material ||
-                material === this.orbitBandHalo.material ||
-                material === this.topRail.material ||
-                material === this.topRailHalo.material ||
-                material === this.topRailCross.material ||
-                material === this.topRailCrossHalo.material ||
-                material === this.beaconMaterial
-            ) {
-                return;
-            }
-
-            setFadeOpacity(material, this.visualFade);
-        });
-        setFadeOpacity(this.orbitBand.material, this.visualFade, this.orbitBandOpacity || getBaseOpacity(this.orbitBand.material));
-        setFadeOpacity(this.orbitBandHalo.material, this.visualFade, this.orbitBandHaloOpacity || getBaseOpacity(this.orbitBandHalo.material));
+        for (let index = 0; index < this.fadeMaterialList.length; index += 1) {
+            setFadeOpacity(this.fadeMaterialList[index], this.visualFade);
+        }
+        setFadeOpacity(this.orbitBand.material, this.visualFade,
+            (this.orbitBandOpacity || getBaseOpacity(this.orbitBand.material)) * orbitContrast);
+        setFadeOpacity(this.orbitBandHalo.material, this.visualFade,
+            (this.orbitBandHaloOpacity || getBaseOpacity(this.orbitBandHalo.material)) * orbitHaloContrast);
         setFadeOpacity(this.topRail.material, this.visualFade, this.topRailOpacity || getBaseOpacity(this.topRail.material));
         setFadeOpacity(this.topRailHalo.material, this.visualFade, this.topRailHaloOpacity || getBaseOpacity(this.topRailHalo.material));
         setFadeOpacity(this.topRailCross.material, this.visualFade, this.topRailOpacity || getBaseOpacity(this.topRailCross.material));
         setFadeOpacity(this.topRailCrossHalo.material, this.visualFade, this.topRailHaloOpacity || getBaseOpacity(this.topRailCrossHalo.material));
-        setFadeOpacity(this.beaconMaterial, this.visualFade, this.beaconOpacity);
+        setFadeOpacity(this.beaconMaterial, this.visualFade, this.beaconOpacity * beaconContrast);
     }
 
     setTopRailScale(pulseScale = 1) {
@@ -329,7 +318,9 @@ export default class Platform {
     }
 
     refreshTopRailGlow(beatPulse = this.topRailPulse, landingBoost = this.resolveTopRailLandingBoost()) {
-        const pulse = resolveBeatPulse(beatPulse);
+        const pulse = beatPulse === this.topRailPulse ?
+            this.topRailPulse :
+            resolveBeatPulse(beatPulse, this.topRailPulse);
         const railRhythm = 0.68 + (Math.sin((this.beaconPhase * 0.82) + this.colorCycle.phase) + 1) * 0.06;
         const haloRhythm = 0.52 + (Math.sin((this.beaconPhase * 0.66) + this.colorCycle.phase) + 1) * 0.1;
 
@@ -338,14 +329,14 @@ export default class Platform {
                 (railRhythm + pulse.intensity * TOP_RAIL_BEAT_OPACITY_BOOST +
                     landingBoost * TOP_RAIL_LANDING_OPACITY_BOOST),
             0,
-            1
+            TOP_RAIL_MAX_OPACITY
         );
         this.topRailHaloOpacity = clamp(
             getBaseOpacity(this.topRailHalo.material) *
                 (haloRhythm + pulse.intensity * TOP_RAIL_BEAT_HALO_BOOST +
                     landingBoost * TOP_RAIL_LANDING_HALO_BOOST),
             0,
-            1
+            TOP_RAIL_MAX_HALO_OPACITY
         );
     }
 
@@ -440,7 +431,7 @@ export default class Platform {
         this.launchRevealTimer = 0;
         this.colorCycle.phase = index * 0.37;
         this.colorCycle.baseHue = PLATFORM_COLOR_HUES[type] || PLATFORM_COLOR_HUES.standard;
-        this.topRailPulse = resolveBeatPulse();
+        resolveBeatPulse({}, this.topRailPulse);
         this.topRailLengthScale = config.radius / GAME_CONFIG.platform.baseRadius;
         this.group.visible = true;
         this.group.position.set(x, GAME_CONFIG.platform.startY, z);
@@ -562,13 +553,12 @@ export default class Platform {
         if (!this.active) return;
 
         const frameScale = Math.min(delta * 60, 2);
-        const topRailPulse = resolveBeatPulse(beatPulse);
+        const topRailPulse = resolveBeatPulse(beatPulse, this.topRailPulse);
         this.group.position.z += speed * frameScale;
         this.updateMotion(delta);
         this.updateColorCycle(delta, speed);
         this.orbitBand.rotation.z += 0.028 * frameScale;
         this.orbitBandHalo.rotation.z += 0.018 * frameScale;
-        this.topRailPulse = topRailPulse;
         this.topRailGroup.rotation.y += (0.008 + topRailPulse.tempo * 0.009) * frameScale;
         if (this.pickup.visible) {
             const pulse = 1 + Math.sin(this.beaconPhase * 1.65) * 0.055;
@@ -601,9 +591,10 @@ export default class Platform {
             this.feedbackTimer = Math.max(0, this.feedbackTimer - delta);
             const progress = 1 - (this.feedbackTimer / IMPACT_FEEDBACK_SECONDS);
             const eased = easeOutCubic(progress);
-            const fade = 1 - progress;
-            const primaryScale = 0.75 + eased * 2.25;
-            const afterglowScale = 1.05 + eased * 3.15;
+            const fade = Math.pow(1 - progress, 0.72);
+            const afterglowFade = Math.pow(1 - progress, 1.05);
+            const primaryScale = 0.72 + eased * 3.38;
+            const afterglowScale = 1.02 + eased * 4.58;
             const compression = 1 + Math.sin(progress * Math.PI) * 0.045;
 
             this.pad.scale.set(compression, 1, compression);
@@ -613,7 +604,7 @@ export default class Platform {
             this.shockwave.scale.set(primaryScale, primaryScale, primaryScale);
             this.impactAfterglow.scale.set(afterglowScale, afterglowScale, afterglowScale);
             this.shockwave.material.opacity = Math.max(0, fade * this.shockwaveMaxOpacity);
-            this.impactAfterglow.material.opacity = Math.max(0, fade * fade * this.afterglowMaxOpacity);
+            this.impactAfterglow.material.opacity = Math.max(0, afterglowFade * this.afterglowMaxOpacity);
             this.shockwave.visible = this.feedbackTimer > 0;
             this.impactAfterglow.visible = this.feedbackTimer > 0;
             this.setPadBrightness(this.isCleared ? 1 : fade);

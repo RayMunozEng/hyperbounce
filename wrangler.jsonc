@@ -1,0 +1,20 @@
+{
+    "$schema": "./node_modules/wrangler/config-schema.json",
+    "name": "hyperbounce-leaderboard",
+    "main": "workers/leaderboard-worker.js",
+    "compatibility_date": "2026-07-10",
+    "workers_dev": true,
+    "preview_urls": false,
+    "vars": {
+        "ALLOWED_ORIGINS": "https://raymunozeng.github.io,http://127.0.0.1:8765",
+        "SUPABASE_URL": "https://asaqliatncnrjophebkm.supabase.co",
+        "SUPABASE_ANON_KEY": "sb_publishable_CzydTYy6XIxL9u9UGFc3eQ_3jCjZDG1"
+    },
+    "d1_databases": [
+        {
+            "binding": "HYPERBOUNCE_DB",
+            "database_name": "hyperbounce-leaderboard",
+            "database_id": "76bee6f9-160e-4edb-9789-90cba1e8bc5f"
+        }
+    ]
+}

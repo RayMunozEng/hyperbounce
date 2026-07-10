@@ -1,18 +1,26 @@
 const fs = require("fs");
 const Module = require("module");
 const path = require("path");
-const babel = require("@babel/core");
+const ts = require("typescript");
+
+function transformSource(source, filename) {
+  return ts.transpileModule(source, {
+    fileName: filename,
+    compilerOptions: {
+      allowJs: true,
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText;
+}
 
 function compile(filename, parent) {
   const source = fs.readFileSync(filename, "utf8");
-  const { code } = babel.transformSync(source, {
-    filename,
-    presets: ["@babel/preset-env"],
-  });
   const mod = new Module(filename, parent);
   mod.filename = filename;
   mod.paths = Module._nodeModulePaths(path.dirname(filename));
-  mod._compile(code, filename);
+  mod._compile(transformSource(source, filename), filename);
   return mod.exports;
 }
 
@@ -23,11 +31,7 @@ function loadSourceModule(relativePath) {
   require.extensions[".js"] = function loadTranspiledSource(mod, filename) {
     if (filename.startsWith(path.join(projectRoot, "src"))) {
       const source = fs.readFileSync(filename, "utf8");
-      const { code } = babel.transformSync(source, {
-        filename,
-        presets: ["@babel/preset-env"],
-      });
-      mod._compile(code, filename);
+      mod._compile(transformSource(source, filename), filename);
       return;
     }
 

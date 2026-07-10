@@ -4,7 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Hyperbounce</title>
+    <title>Hyperbounce | Neon 3D Arcade Runner</title>
+    <meta name="description" content="Hyperbounce is a neon 3D arcade runner about landing cleanly, building combos, and surviving an accelerating trip through space.">
+    <link rel="canonical" href="https://raymunozeng.github.io/Hyperbounce/">
+    <meta property="og:title" content="Hyperbounce | Neon 3D Arcade Runner">
+    <meta property="og:description" content="Land on energy platforms, collect combo cores, and hold on as the run accelerates.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://raymunozeng.github.io/Hyperbounce/">
+    <meta property="og:image" content="https://raymunozeng.github.io/Hyperbounce/docs/images/hyperbounce-gameplay.png">
+    <meta property="og:image:alt" content="Hyperbounce gameplay in a neon space environment">
+    <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="styling.css">
     <link rel="apple-touch-icon" sizes="180x180" href="src/images/favicon_io/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="src/images/favicon_io/favicon-32x32.png">
@@ -21,8 +30,12 @@
                 <strong id="score">0</strong>
             </div>
             <div class="hud-stat">
-                <span class="hud-label">Best</span>
+                <span class="hud-label">Personal</span>
                 <strong id="highscore">0</strong>
+            </div>
+            <div id="overall-stat" class="hud-stat hidden">
+                <span class="hud-label">Overall</span>
+                <strong id="overall-highscore">0</strong>
             </div>
             <div class="hud-stat accent">
                 <span class="hud-label">Combo</span>
@@ -42,6 +55,38 @@
                 <span class="title-star" aria-hidden="true"></span>
             </h1>
             <div id="directions-container" class="run-mantra">Land. Chain. Survive.</div>
+            <section id="leaderboard-panel" class="leaderboard-panel hidden" aria-label="Top scores">
+                <div class="leaderboard-heading">
+                    <span>Top 10</span>
+                    <small>Overall pilots</small>
+                </div>
+                <ol id="leaderboard-list" class="leaderboard-list"></ol>
+                <p id="leaderboard-empty" class="leaderboard-empty">No scores yet.</p>
+                <form id="leaderboard-form" class="leaderboard-form hidden">
+                    <label for="leaderboard-name">Name for the board</label>
+                    <div class="leaderboard-input-row">
+                        <input id="leaderboard-name" maxlength="16" autocomplete="nickname" placeholder="Your name">
+                        <button id="leaderboard-submit" class="primary-action compact" type="submit">Save</button>
+                    </div>
+                    <p id="leaderboard-message" class="leaderboard-message" aria-live="polite"></p>
+                </form>
+            </section>
+            <section id="auth-panel" class="auth-panel hidden" aria-label="Account">
+                <div class="auth-heading">
+                    <span>Account</span>
+                    <small id="auth-user">Guest</small>
+                </div>
+                <button id="auth-google-btn" class="auth-provider auth-google" type="button">
+                    <img class="google-provider-icon" src="src/images/google-g.svg" alt="" aria-hidden="true">
+                    <span>Continue with Google</span>
+                </button>
+                <div class="auth-email-row">
+                    <input id="auth-email" type="email" autocomplete="email" placeholder="Email magic link">
+                    <button id="auth-email-btn" class="auth-provider compact" type="button">Email</button>
+                </div>
+                <button id="auth-signout-btn" class="auth-link hidden" type="button">Sign out</button>
+                <p id="auth-message" class="auth-message" aria-live="polite">Sign in to save top scores.</p>
+            </section>
             <div class="menu-actions">
                 <button id="start-btn" class="primary-action" type="button">Start Run</button>
                 <button id="retry-btn" class="primary-action danger hidden" type="button">Retry</button>
@@ -57,6 +102,7 @@
             <span id="sound-icon">Sound On</span>
         </button>
     </main>
-    <script src="bundle.js"></script>
+    <script src="site-config.js"></script>
+    <script src="bootstrap.js"></script>
 </body>
 </html>

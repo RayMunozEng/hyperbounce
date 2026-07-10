@@ -64,15 +64,18 @@ function createStarMaterial(THREE, layer, suppliedMaterial) {
 }
 
 function createStarChunk(THREE, layerCount, spread, segmentDepth, material, offsetZ) {
-    const geometry = new THREE.Geometry();
+    const positions = new Float32Array(layerCount * 3);
 
     for (let i = 0; i < layerCount; i++) {
-        geometry.vertices.push(new THREE.Vector3(
-            (Math.random() - 0.5) * spread,
-            (Math.random() - 0.5) * spread,
-            -Math.random() * segmentDepth
-        ));
+        const offset = i * 3;
+
+        positions[offset] = (Math.random() - 0.5) * spread;
+        positions[offset + 1] = (Math.random() - 0.5) * spread;
+        positions[offset + 2] = -Math.random() * segmentDepth;
     }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 
     const points = new THREE.Points(geometry, material);
     points.position.z = offsetZ;
@@ -206,11 +209,11 @@ export class SpaceTraffic {
         this.sideSpread = sideSpread;
         this.verticalSpread = verticalSpread;
         this.random = random;
-        this.planetGeometry = new THREE.SphereBufferGeometry(1, 18, 14);
-        this.planetAtmosphereGeometry = new THREE.SphereBufferGeometry(1.18, 18, 14);
-        this.planetBandGeometry = new THREE.TorusBufferGeometry(1.02, 0.012, 6, 48);
-        this.planetRingGeometry = new THREE.TorusBufferGeometry(1.58, 0.035, 8, 72);
-        this.asteroidGeometry = new THREE.DodecahedronBufferGeometry(1, 1);
+        this.planetGeometry = new THREE.SphereGeometry(1, 18, 14);
+        this.planetAtmosphereGeometry = new THREE.SphereGeometry(1.18, 18, 14);
+        this.planetBandGeometry = new THREE.TorusGeometry(1.02, 0.012, 6, 48);
+        this.planetRingGeometry = new THREE.TorusGeometry(1.58, 0.035, 8, 72);
+        this.asteroidGeometry = new THREE.DodecahedronGeometry(1, 1);
         this.bodies = [];
 
         for (let i = 0; i < count; i++) {

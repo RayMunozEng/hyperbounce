@@ -1,29 +1,18 @@
-const path = require('path');
+const path = require("path");
 
 module.exports = {
     context: __dirname,
-    entry: './src/index.js',
+    entry: "./src/index.js",
     output: {
         path: path.resolve(__dirname),
-        filename: 'bundle.js'
+        filename: "bundle.js"
     },
-    module: {
-        rules: [
-            {
-                test: /\.jsx?$/,
-                exclude: /(node_modules)/,
-                use: {
-                    loader: 'babel-loader',
-                    query: {
-                        presets: ['@babel/env']
-                    }
-                },
-            }
-        ]
+    devtool: false,
+    performance: {
+        maxAssetSize: 921600,
+        maxEntrypointSize: 921600
     },
-    devtool: 'eval-source-map',
     resolve: {
-        extensions: [".js", "*"]
+        extensions: [".js"]
     }
 };
-

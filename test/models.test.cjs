@@ -91,6 +91,7 @@ function makeAssets() {
     geometries: {
       playerCore: {},
       playerShell: {},
+      playerSeam: { role: "player-seam" },
       playerRing: {},
       pickupCore: {},
       pickupRing: {},
@@ -108,7 +109,15 @@ function makeAssets() {
       shockwave: {},
     },
     materials: {
-      player: { core: material, shell: material, ring: material, trail: material },
+      player: {
+        core: material,
+        shell: material,
+        seam: material,
+        seamAlt: material,
+        seamAccent: material,
+        ring: material,
+        trail: material,
+      },
       platform: {
         standard: material,
         multiplier: material,
@@ -151,7 +160,7 @@ test("player reset and update keep movement bounded", () => {
   assert.equal(player.position.y, -2.5);
 });
 
-test("player syncs bounce speed to the current run speed", () => {
+test("player syncs bounce speed to the current run speed and target gap", () => {
   const { default: Player } = loadSourceModule("src/player.js");
   const { GAME_CONFIG } = loadSourceModule("src/config.js");
   const { resolveBounceSpeed } = loadSourceModule("src/tempo.js");
@@ -159,27 +168,36 @@ test("player syncs bounce speed to the current run speed", () => {
   const scene = makeObject3D();
   const player = new Player({ THREE, scene, assets: makeAssets() });
   const runSpeed = GAME_CONFIG.run.baseSpeed + GAME_CONFIG.run.speedGain * 40;
+  const platformGap = Math.abs(GAME_CONFIG.platform.startZ) * 0.82;
 
-  player.syncRunSpeed(runSpeed);
+  player.syncRunSpeed(runSpeed, platformGap);
 
-  assert.equal(player.speed, resolveBounceSpeed(runSpeed));
+  assert.equal(player.speed, resolveBounceSpeed(runSpeed, platformGap));
 });
 
-test("player energy rings slowly orbit around the core", () => {
+test("player seams stay attached while the faceted assembly rotates", () => {
   const { default: Player } = loadSourceModule("src/player.js");
   const THREE = makeFakeThree();
   const scene = makeObject3D();
-  const player = new Player({ THREE, scene, assets: makeAssets() });
-  const orbitAStartY = player.ringOrbitA.rotation.y;
-  const orbitBStartX = player.ringOrbitB.rotation.x;
+  const assets = makeAssets();
+  const player = new Player({ THREE, scene, assets });
+  const mountAStartY = player.seamMountA.rotation.y;
+  const mountBStartX = player.seamMountB.rotation.x;
+  const assemblyStartY = player.visualAssembly.rotation.y;
 
   player.update(1 / 60, 0, true);
 
-  assert.equal(player.ringOrbitA.children.includes(player.ringA), true);
-  assert.equal(player.ringOrbitB.children.includes(player.ringB), true);
-  assert.notEqual(player.ringOrbitA.rotation.y, orbitAStartY);
-  assert.notEqual(player.ringOrbitB.rotation.x, orbitBStartX);
-  assert.notEqual(player.ringA.position.x, 0);
+  assert.equal(player.group.children.includes(player.visualAssembly), true);
+  assert.equal(player.visualAssembly.children.includes(player.shell), true);
+  assert.equal(player.seamMountA.children.includes(player.seamA), true);
+  assert.equal(player.seamMountB.children.includes(player.seamB), true);
+  assert.equal(player.seamMountC.children.includes(player.seamC), true);
+  assert.equal(player.seamA.geometry, assets.geometries.playerSeam);
+  assert.equal(player.seamA.position.x, 0);
+  assert.equal(player.seamB.position.x, 0);
+  assert.equal(player.seamMountA.rotation.y, mountAStartY);
+  assert.equal(player.seamMountB.rotation.x, mountBStartX);
+  assert.notEqual(player.visualAssembly.rotation.y, assemblyStartY);
 });
 
 test("player motion wake stays local to the player instead of storing world trail points", () => {
@@ -251,6 +269,63 @@ test("player teleport arrival uses reusable expanding effect rings", () => {
   assert.equal(player.teleportEffect.visible, false);
 });
 
+test("player death opens a reusable gravity rift and corkscrews into it", () => {
+  const { default: Player } = loadSourceModule("src/player.js");
+  const THREE = makeFakeThree();
+  const scene = makeObject3D();
+  const player = new Player({ THREE, scene, assets: makeAssets() });
+  const effect = player.deathEffect;
+  const rift = player.deathRift;
+  const ghosts = player.deathGhosts.slice();
+  const startY = player.position.y;
+
+  player.beginDeath();
+
+  assert.equal(effect.visible, true);
+  assert.equal(rift.visible, true);
+  assert.equal(scene.children.includes(rift), true);
+  assert.equal(player.riftRings.length >= 3, true);
+  assert.equal(ghosts.length >= 3, true);
+  assert.equal(player.motionWake.visible, false);
+
+  player.updateDeath(0.12);
+
+  assert.equal(rift.scale.x > 0.2, true);
+  assert.equal(player.seamMountA.scale.x > 1, true);
+  assert.equal(player.seamMountC.scale.x > 1, true);
+  assert.equal(player.position.y > startY - 0.5, true);
+
+  for (let frame = 0; frame < 42; frame += 1) {
+    player.updateDeath(1 / 60);
+  }
+
+  assert.equal(player.position.y < startY - 1.5, true);
+  assert.notEqual(player.position.x, 0);
+  assert.equal(player.core.scale.y > player.core.scale.x, true);
+  assert.equal(player.deathGhosts.some((ghost) => ghost.material.opacity > 0.05), true);
+  assert.strictEqual(player.deathEffect, effect);
+  assert.deepEqual(player.deathGhosts, ghosts);
+
+  let finished = false;
+  for (let frame = 0; frame < 60 && !finished; frame += 1) {
+    finished = player.updateDeath(1 / 60);
+  }
+
+  assert.equal(finished, true);
+  assert.equal(player.riftBurst.scale.x > 2.5, true);
+  assert.equal(player.core.scale.x > 0, true);
+  assert.equal(player.core.scale.y > 0, true);
+  assert.equal(player.shell.scale.x > 0, true);
+
+  player.reset();
+
+  assert.equal(player.deathEffect.visible, false);
+  assert.equal(player.deathRift.visible, false);
+  assert.equal(player.motionWake.visible, true);
+  assert.equal(player.core.scale.x, 1);
+  assert.equal(player.group.rotation.z, 0);
+});
+
 test("player reflects leftover motion at bounce boundaries", () => {
   const { default: Player } = loadSourceModule("src/player.js");
   const { GAME_CONFIG } = loadSourceModule("src/config.js");
@@ -280,10 +355,11 @@ test("player defaults to the primary game scene", () => {
   const previousWindow = global.window;
 
   global.window = { game: { scene }, THREE };
-  new Player({ THREE, assets: makeAssets() });
+  const player = new Player({ THREE, assets: makeAssets() });
   global.window = previousWindow;
 
-  assert.equal(scene.children.length, 1);
+  assert.equal(scene.children.includes(player.group), true);
+  assert.equal(scene.children.includes(player.deathRift), true);
 });
 
 test("platform activation configures type state and feedback", () => {
@@ -323,24 +399,34 @@ test("platform combo pickup uses separate shape and color cues", () => {
   assert.equal(platform.pickup.glint.position.y > platform.pickup.core.position.y, true);
 });
 
-test("platform landing feedback layers a softer afterglow behind the impact", () => {
+test("platform landing feedback reuses a prominent shockwave and softer afterglow", () => {
   const { default: Platform } = loadSourceModule("src/platform.js");
   const THREE = makeFakeThree();
   const platform = new Platform({ THREE, scene: makeObject3D(), assets: makeAssets() });
+  const shockwave = platform.shockwave;
+  const afterglow = platform.impactAfterglow;
 
   platform.activate("standard", 0, -12, 0);
   platform.resolveLanding({ hitPickup: false, resetMultiplier: false, boost: 0 });
 
   assert.equal(platform.impactAfterglow.visible, true);
   assert.equal(platform.impactAfterglow.material.opacity < platform.shockwave.material.opacity, true);
-  assert.equal(platform.shockwave.material.opacity <= 0.14, true);
-  assert.equal(platform.impactAfterglow.material.opacity <= 0.04, true);
+  assert.equal(platform.shockwave.material.opacity >= 0.28, true);
+  assert.equal(platform.impactAfterglow.material.opacity >= 0.045, true);
 
-  platform.update(0.12, 0);
+  platform.update(0.25, 0);
 
+  assert.equal(platform.shockwave.visible, true);
+  assert.equal(platform.impactAfterglow.visible, true);
   assert.equal(platform.shockwave.scale.x > 1, true);
   assert.equal(platform.impactAfterglow.scale.x > platform.shockwave.scale.x, true);
   assert.equal(platform.impactAfterglow.material.opacity < platform.shockwave.material.opacity, true);
+
+  platform.update(1, 0);
+  platform.resolveLanding({ hitPickup: false, resetMultiplier: false, boost: 0 });
+
+  assert.strictEqual(platform.shockwave, shockwave);
+  assert.strictEqual(platform.impactAfterglow, afterglow);
 });
 
 test("platform pad starts dim and stays bright after landing", () => {
@@ -534,6 +620,7 @@ test("platform top rails form a shared rotating X with beat-pulsed glow", () => 
   const platform = new Platform({ THREE, scene: makeObject3D(), assets });
 
   platform.activate("standard", 0, -12, 0);
+  const pulseState = platform.topRailPulse;
 
   assert.equal(Boolean(platform.topRailCross), true);
   assert.equal(Boolean(platform.topRailCrossHalo), true);
@@ -551,6 +638,7 @@ test("platform top rails form a shared rotating X with beat-pulsed glow", () => 
   platform.update(1 / 60, GAME_CONFIG.run.baseSpeed, { intensity: 1, tempo: 2.4 });
   const beatRailOpacity = platform.topRail.material.opacity;
 
+  assert.strictEqual(platform.topRailPulse, pulseState);
   assert.equal(platform.topRailGroup.rotation.y > slowRotation, true);
   assert.equal(platform.topRail.material.opacity >= dimRailOpacity * 1.75, true);
   assert.equal(platform.topRailHalo.material.opacity >= dimHaloOpacity * 2.4, true);
@@ -563,6 +651,33 @@ test("platform top rails form a shared rotating X with beat-pulsed glow", () => 
   assert.equal(platform.topRail.material.opacity > beatRailOpacity, true);
   assert.equal(platform.topRailCross.material.opacity, platform.topRail.material.opacity);
   assert.equal(platform.topRailCrossHalo.material.opacity, platform.topRailHalo.material.opacity);
+});
+
+test("landing contrast keeps the X crisp while surrounding platform glow dips", () => {
+  const { default: Platform } = loadSourceModule("src/platform.js");
+  const THREE = makeFakeThree();
+  const assets = makeAssets();
+
+  assets.materials.platform.orbitBand = makeMaterial({ opacity: 0.72 });
+  assets.materials.platform.orbitBandHalo = makeMaterial({ opacity: 0.32 });
+  assets.materials.platform.topRail = makeMaterial({ opacity: 0.34 });
+  assets.materials.platform.topRailHalo = makeMaterial({ opacity: 0.2 });
+  assets.materials.platform.beacon = makeMaterial({ opacity: 0.18 });
+  const platform = new Platform({ THREE, scene: makeObject3D(), assets });
+
+  platform.activate("standard", 0, -12, 0);
+  platform.update(1 / 60, 0, { intensity: 0, tempo: 1 });
+  const idleOrbitOpacity = platform.orbitBand.material.opacity;
+  const idleBeaconOpacity = platform.beacon.material.opacity;
+
+  platform.resolveLanding({ hitPickup: false, resetMultiplier: false, boost: 0 });
+
+  assert.equal(platform.topRail.material.opacity > platform.orbitBand.material.opacity, true);
+  assert.equal(platform.topRailHalo.material.opacity <= platform.topRail.material.opacity * 0.38, true);
+  assert.equal(platform.orbitBand.material.opacity < idleOrbitOpacity * 0.72, true);
+  assert.equal(platform.beacon.material.opacity < idleBeaconOpacity * 0.65, true);
+  assert.equal(platform.shockwave.material.opacity <= 0.3, true);
+  assert.equal(platform.impactAfterglow.material.opacity <= 0.06, true);
 });
 
 test("platforms fade in from the distant runway without disabling pickups", () => {

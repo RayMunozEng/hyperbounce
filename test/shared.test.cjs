@@ -1,4 +1,6 @@
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const test = require("node:test");
 const loadSourceModule = require("./load-source-module.cjs");
 
@@ -32,12 +34,25 @@ function makeFakeThree() {
   class Geometry {
     constructor(...args) {
       this.args = args;
-      this.vertices = [];
+      this.attributes = {};
       this.disposed = false;
+    }
+
+    setAttribute(name, attribute) {
+      this.attributes[name] = attribute;
+      return this;
     }
 
     dispose() {
       this.disposed = true;
+    }
+  }
+
+  class BufferAttribute {
+    constructor(array, itemSize) {
+      this.array = array;
+      this.itemSize = itemSize;
+      this.count = array.length / itemSize;
     }
   }
 
@@ -76,17 +91,18 @@ function makeFakeThree() {
   return {
     AdditiveBlending: "additive",
     DoubleSide: "double-side",
-    CylinderBufferGeometry: Geometry,
-    DodecahedronBufferGeometry: Geometry,
-    IcosahedronBufferGeometry: Geometry,
+    BufferAttribute,
+    BufferGeometry: Geometry,
+    CylinderGeometry: Geometry,
+    DodecahedronGeometry: Geometry,
+    IcosahedronGeometry: Geometry,
     MeshBasicMaterial: Material,
     MeshStandardMaterial: Material,
     PointsMaterial: Material,
-    RingBufferGeometry: Geometry,
-    SphereBufferGeometry: Geometry,
-    TorusBufferGeometry: Geometry,
+    RingGeometry: Geometry,
+    SphereGeometry: Geometry,
+    TorusGeometry: Geometry,
     TextureLoader,
-    TorusBufferGeometry: Geometry,
     Vector3: class {
       constructor(x = 0, y = 0, z = 0) {
         this.x = x;
@@ -94,7 +110,6 @@ function makeFakeThree() {
         this.z = z;
       }
     },
-    Geometry,
     Group,
     Mesh,
     Points: class {
@@ -106,6 +121,46 @@ function makeFakeThree() {
     },
   };
 }
+
+test("release build uses a production Webpack 5 stack without legacy Three APIs", () => {
+  const root = path.join(__dirname, "..");
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const indexSource = fs.readFileSync(path.join(root, "src", "index.js"), "utf8");
+  const renderSources = ["effects.js", "materials.js", "record_celebration.js", "game.js"]
+    .map((file) => fs.readFileSync(path.join(root, "src", file), "utf8"))
+    .join("\n");
+
+  assert.equal(packageJson.scripts.build, "webpack --mode=production");
+  assert.match(packageJson.devDependencies.webpack, /^\^5\./);
+  assert.match(packageJson.dependencies.three, /^\^0\.185\./);
+  assert.equal(packageJson.dependencies.postprocessing, undefined);
+  assert.equal(packageJson.dependencies["@babel/core"], undefined);
+  assert.match(indexSource, /three\/examples\/jsm\/postprocessing\/EffectComposer\.js/);
+  assert.match(indexSource, /three\/examples\/jsm\/postprocessing\/OutputPass\.js/);
+  assert.match(renderSources, /outputColorSpace = this\.THREE\.LinearSRGBColorSpace/);
+  assert.doesNotMatch(indexSource, /three\/examples\/js\//);
+  assert.doesNotMatch(renderSources, /(?:Sphere|Cylinder|Dodecahedron|Icosahedron|Torus|Ring)BufferGeometry|new THREE\.Geometry\(|THREE\.VertexColors|THREE\.Clock|gammaInput|gammaOutput/);
+});
+
+test("release repository excludes internal plans, prototypes, and unused legacy assets", () => {
+  const root = path.join(__dirname, "..");
+  const removedPaths = [
+    "docs/superpowers",
+    "index.1.html",
+    "js/three.js",
+    "src/images/angellist.svg",
+    "src/images/circleGradientLarge.png",
+    "src/images/github.svg",
+    "src/images/hyperbounce_wireframe.png",
+    "src/sounds/bounce_test.wav",
+    "src/sounds/bounce_test02.wav",
+    "src/sounds/space_love_attack.mp3",
+  ];
+
+  removedPaths.forEach((relativePath) => {
+    assert.equal(fs.existsSync(path.join(root, relativePath)), false, `${relativePath} should not ship`);
+  });
+});
 
 test("config defines the focused neon platform types", () => {
   const { GAME_CONFIG, PLATFORM_TYPES } = loadSourceModule("src/config.js");
@@ -129,6 +184,8 @@ test("shared assets factory centralizes reusable geometries and materials", () =
   const assets = createSharedAssets(makeFakeThree());
 
   assert.equal(Boolean(assets.geometries.playerCore), true);
+  assert.deepEqual(assets.geometries.playerShell.args, [0.98, 2]);
+  assert.deepEqual(assets.geometries.playerSeam.args, [0.965, 0.026, 8, 72]);
   assert.equal(Boolean(assets.geometries.platformPad), true);
   assert.equal(Boolean(assets.geometries.platformOrbitBand), true);
   assert.equal(Boolean(assets.geometries.platformOrbitBandHalo), true);
@@ -146,9 +203,22 @@ test("shared materials keep platforms below the player brightness", () => {
   const platformPadTypes = ["standard", "multiplier", "hazard", "narrow", "boost"];
 
   assert.notEqual(assets.materials.player.core.options.color, COLORS.white);
+  const playerColor = assets.materials.player.core.options.color;
+  const playerBrightness = (
+    ((playerColor >> 16) & 255) * 0.2126 +
+    ((playerColor >> 8) & 255) * 0.7152 +
+    (playerColor & 255) * 0.0722
+  ) / 255;
+  assert.equal(playerBrightness >= 0.62, true);
+  assert.equal(assets.materials.player.core.options.emissiveIntensity >= 0.11, true);
   assert.equal(assets.materials.player.core.options.emissiveIntensity <= 0.12, true);
+  assert.equal(assets.materials.player.core.options.metalness <= 0.22, true);
+  assert.equal(assets.materials.player.core.options.roughness >= 0.36, true);
   assert.equal(assets.materials.player.shell.options.color, COLORS.playerCore);
-  assert.equal(assets.materials.player.shell.options.emissiveIntensity <= 0.1, true);
+  assert.equal(assets.materials.player.shell.options.emissive, COLORS.playerCore);
+  assert.equal(assets.materials.player.shell.options.emissiveIntensity >= 0.52, true);
+  assert.equal(assets.materials.player.shell.options.emissiveIntensity <= 0.6, true);
+  assert.equal(Boolean(assets.materials.player.shell.options.transparent), false);
   assert.notEqual(assets.materials.player.ring.options.color, assets.materials.player.core.options.color);
   assert.notEqual(assets.materials.player.ringAlt.options.color, assets.materials.player.ring.options.color);
   assert.equal(assets.materials.player.ring.options.opacity >= 0.86, true);
@@ -208,9 +278,9 @@ test("starfield builds layered depth with rare glints", () => {
   assert.equal(GAME_CONFIG.stars.count > 1250, true);
   assert.equal(scene.added.length, 6);
   assert.equal(stars.layers[0].chunks.length, 2);
-  assert.equal(stars.layers[0].geometry.vertices.length, 6);
-  assert.equal(stars.layers[1].geometry.vertices.length, 3);
-  assert.equal(stars.layers[2].geometry.vertices.length, 1);
+  assert.equal(stars.layers[0].geometry.attributes.position.count, 6);
+  assert.equal(stars.layers[1].geometry.attributes.position.count, 3);
+  assert.equal(stars.layers[2].geometry.attributes.position.count, 1);
   assert.equal(stars.layers[2].material.options.size > stars.layers[0].material.options.size, true);
   assert.equal(stars.layers[0].material.options.opacity >= 0.4, true);
   assert.equal(stars.layers[2].material.options.size >= 0.34, true);

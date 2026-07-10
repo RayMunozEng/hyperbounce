@@ -1,32 +1,37 @@
 {
-  "name": "Javascript-Project",
+  "name": "hyperbounce",
   "version": "1.0.0",
-  "description": "### Background This is a game where the player object is constantly bouncing up and down, and can move left and right based on user input. As the player is bouncing, platforms are moving towards the player at a gradually increasing speed. The player must hit these platforms to gain points. If the player misses the platform, it's game over.",
-  "main": "index.js",
+  "description": "A neon 3D arcade runner built with JavaScript, Three.js, and WebGL.",
+  "private": true,
   "scripts": {
-    "build": "webpack --mode=development",
-    "test": "node --test test/collision.test.cjs test/shared.test.cjs test/ui.test.cjs test/models.test.cjs test/manager.test.cjs test/scoring.test.cjs test/audio.test.cjs test/game.test.cjs test/tempo.test.cjs",
-    "watch": "webpack --watch --mode=development"
+    "build": "webpack --mode=production",
+    "stage": "node scripts/stage-pages.cjs",
+    "build:pages": "npm run build && npm run stage",
+    "build:dev": "webpack --mode=development",
+    "watch": "webpack --watch --mode=development",
+    "test": "node --test test/collision.test.cjs test/shared.test.cjs test/ui.test.cjs test/models.test.cjs test/manager.test.cjs test/scoring.test.cjs test/audio.test.cjs test/auth.test.cjs test/leaderboard.test.cjs test/game.test.cjs test/render_quality.test.cjs test/record_celebration.test.cjs test/tempo.test.cjs test/worker.test.cjs test/release.test.cjs",
+    "audit": "npm audit --audit-level=high"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rmunoz1994/Javascript-Project.git"
+    "url": "git+https://github.com/RayMunozEng/Hyperbounce.git"
   },
-  "keywords": [],
-  "author": "",
+  "homepage": "https://raymunozeng.github.io/Hyperbounce/",
+  "author": "Ray Munoz",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/rmunoz1994/Javascript-Project/issues"
+    "url": "https://github.com/RayMunozEng/Hyperbounce/issues"
   },
-  "homepage": "https://github.com/rmunoz1994/Javascript-Project#readme",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "@babel/core": "^7.4.3",
-    "@babel/preset-env": "^7.4.3",
-    "babel-loader": "^8.0.5",
-    "howler": "^2.1.2",
-    "postprocessing": "^6.2.1",
-    "three": "^0.103.0",
-    "webpack": "^4.30.0",
-    "webpack-cli": "^3.3.0"
+    "howler": "^2.2.4",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "webpack": "^5.94.0",
+    "webpack-cli": "^5.1.4"
   }
 }

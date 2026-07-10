@@ -1,13 +1,16 @@
-import * as THREE from 'three';
-window.THREE = THREE;
-require("three/examples/js/shaders/CopyShader");
-require("three/examples/js/postprocessing/EffectComposer");
-require("three/examples/js/postprocessing/RenderPass");
-require("three/examples/js/postprocessing/ShaderPass");
-require("three/examples/js/shaders/FXAAShader");
-require("three/examples/js/shaders/SepiaShader");
-require("three/examples/js/shaders/LuminosityHighPassShader");
-require("three/examples/js/postprocessing/UnrealBloomPass");
-import Game from './game.js';
+import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import Game from "./game.js";
 
-new Game();
+const THREEImpl = {
+    ...THREE,
+    EffectComposer,
+    OutputPass,
+    RenderPass,
+    UnrealBloomPass
+};
+
+new Game({ THREEImpl });

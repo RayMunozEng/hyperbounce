@@ -26,6 +26,7 @@ function makeElement(initialClasses = []) {
     children: [],
     className: "",
     disabled: false,
+    value: "",
     textContent: "",
     listeners: {},
     addEventListener(type, handler) {
@@ -313,26 +314,196 @@ test("HUD updates run stats and toggles screens", () => {
     "sound-btn",
     "score",
     "highscore",
+    "overall-highscore",
     "multiplier",
+    "leaderboard-list",
+    "leaderboard-empty",
+    "leaderboard-form",
+    "leaderboard-name",
+    "leaderboard-submit",
+    "leaderboard-message",
+    "auth-panel",
+    "auth-email",
+    "auth-email-btn",
+    "auth-google-btn",
+    "auth-signout-btn",
+    "auth-user",
+    "auth-message",
     "combo-callouts",
     "status-chip",
     "game-over",
   ]);
   const hud = new Hud(doc);
 
-  hud.showPlaying({ score: 12, highScore: 20, multiplier: 3 });
+  hud.showPlaying({ score: 12, highScore: 20, overallHighScore: 44, multiplier: 3 });
 
   assert.equal(doc.elements.score.textContent, "12");
   assert.equal(doc.elements.highscore.textContent, "20");
+  assert.equal(doc.elements["overall-highscore"].textContent, "44");
   assert.equal(doc.elements.multiplier.textContent, "x3");
   assert.equal(doc.elements["start-panel"].classList.contains("hidden"), true);
   assert.equal(doc.elements["status-chip"].classList.contains("hidden"), false);
 
-  hud.showGameOver({ score: 15, highScore: 22, isNewHighScore: true });
+  hud.showGameOver({
+    score: 15,
+    highScore: 22,
+    overallHighScore: 44,
+    isNewHighScore: true,
+    qualifiesForLeaderboard: true
+  });
 
   assert.equal(doc.elements["game-over"].textContent, "NEW HIGH SCORE");
   assert.equal(doc.elements["game-over"].classList.contains("high-score-title"), true);
   assert.equal(doc.elements["retry-btn"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["leaderboard-form"].classList.contains("hidden"), false);
+});
+
+test("HUD renders top ten leaderboard entries", () => {
+  const { Hud } = loadSourceModule("src/hud.js");
+  const doc = makeDocument([
+    "app-shell",
+    "start-panel",
+    "start-btn",
+    "retry-btn",
+    "sound-btn",
+    "score",
+    "highscore",
+    "overall-highscore",
+    "multiplier",
+    "leaderboard-list",
+    "leaderboard-empty",
+    "leaderboard-form",
+    "leaderboard-name",
+    "leaderboard-submit",
+    "leaderboard-message",
+    "auth-panel",
+    "auth-email",
+    "auth-email-btn",
+    "auth-google-btn",
+    "auth-signout-btn",
+    "auth-user",
+    "auth-message",
+    "combo-callouts",
+    "status-chip",
+    "game-over",
+  ]);
+  const hud = new Hud(doc);
+
+  hud.setLeaderboard({
+    entries: [
+      { name: "Ray", score: 42 },
+      { name: "Ada", score: 36 },
+    ],
+    overallHighScore: 42,
+  });
+
+  assert.equal(doc.elements["overall-highscore"].textContent, "42");
+  assert.equal(doc.elements["leaderboard-list"].children.length, 2);
+  assert.equal(doc.elements["leaderboard-empty"].classList.contains("hidden"), true);
+  assert.equal(doc.elements["leaderboard-list"].children[0].children[1].textContent, "Ray");
+  assert.equal(doc.elements["leaderboard-list"].children[0].className.includes("leaderboard-champion"), true);
+  assert.equal(doc.elements["leaderboard-list"].children[1].className.includes("leaderboard-podium"), true);
+});
+
+test("HUD renders auth state and binds login controls", () => {
+  const { Hud } = loadSourceModule("src/hud.js");
+  const doc = makeDocument([
+    "app-shell",
+    "start-panel",
+    "start-btn",
+    "retry-btn",
+    "sound-btn",
+    "score",
+    "highscore",
+    "overall-highscore",
+    "multiplier",
+    "leaderboard-list",
+    "leaderboard-empty",
+    "leaderboard-form",
+    "leaderboard-name",
+    "leaderboard-submit",
+    "leaderboard-message",
+    "auth-panel",
+    "auth-email",
+    "auth-email-btn",
+    "auth-google-btn",
+    "auth-signout-btn",
+    "auth-user",
+    "auth-message",
+    "combo-callouts",
+    "status-chip",
+    "game-over",
+  ]);
+  const calls = [];
+  const hud = new Hud(doc);
+
+  hud.bindControls({
+    signInGoogle() { calls.push("google"); },
+    sendEmailLink() { calls.push("email"); },
+    signOut() { calls.push("out"); },
+  });
+  hud.setAuthState({
+    isConfigured: true,
+    isSignedIn: true,
+    email: "ray@example.com",
+    message: "Signed in",
+  });
+
+  doc.elements["auth-google-btn"].listeners.click();
+  doc.elements["auth-email-btn"].listeners.click();
+  doc.elements["auth-signout-btn"].listeners.click();
+
+  assert.deepEqual(calls, ["google", "email", "out"]);
+  assert.equal(doc.elements["auth-user"].textContent, "ray@example.com");
+  assert.equal(doc.elements["auth-signout-btn"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["auth-message"].textContent, "Signed in");
+});
+
+test("HUD hides online services until production configuration is available", () => {
+  const { Hud } = loadSourceModule("src/hud.js");
+  const doc = makeDocument([
+    "leaderboard-panel",
+    "leaderboard-list",
+    "leaderboard-empty",
+    "leaderboard-form",
+    "leaderboard-name",
+    "leaderboard-submit",
+    "leaderboard-message",
+    "overall-stat",
+    "overall-highscore",
+    "auth-panel",
+    "auth-email",
+    "auth-email-btn",
+    "auth-google-btn",
+    "auth-signout-btn",
+    "auth-user",
+    "auth-message",
+  ]);
+  const hud = new Hud(doc);
+
+  hud.setLeaderboardAvailability(false);
+  hud.setAuthState({ isConfigured: false });
+
+  assert.equal(doc.elements["leaderboard-panel"].classList.contains("hidden"), true);
+  assert.equal(doc.elements["overall-stat"].classList.contains("hidden"), true);
+  assert.equal(doc.elements["auth-panel"].classList.contains("hidden"), true);
+
+  hud.setLeaderboardAvailability(true);
+  hud.setAuthState({ isConfigured: true });
+
+  assert.equal(doc.elements["leaderboard-panel"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["overall-stat"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["auth-panel"].classList.contains("hidden"), false);
+});
+
+test("release markup starts optional online panels hidden without deployment placeholders", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+
+  assert.match(html, /id="leaderboard-panel" class="leaderboard-panel hidden"/);
+  assert.match(html, /id="auth-panel" class="auth-panel hidden"/);
+  assert.match(html, /id="overall-stat" class="hud-stat hidden"[\s\S]*?<span class="hud-label">Overall<\/span>[\s\S]*?id="overall-highscore"/);
+  assert.doesNotMatch(html, /id="overall-stat"[\s\S]*?<span class="hud-label">Score<\/span>/);
+  assert.doesNotMatch(html, /connect(?:s)? after deployment/i);
 });
 
 test("HUD never reuses the intro panel reveal for game over", () => {
@@ -569,6 +740,49 @@ test("HUD celebrates new high scores with golden copy and neon fireworks", () =>
   assert.equal(fireworks.every((firework) => firework.listeners.animationend), true);
 });
 
+test("HUD keeps all-time record DOM effects limited to the trophy", () => {
+  const { Hud } = loadSourceModule("src/hud.js");
+  const doc = makeDocument([
+    "app-shell",
+    "start-panel",
+    "start-btn",
+    "retry-btn",
+    "sound-btn",
+    "score",
+    "highscore",
+    "multiplier",
+    "combo-callouts",
+    "status-chip",
+    "game-over",
+  ]);
+  const hud = new Hud(doc);
+
+  hud.showGameOver({
+    score: 60,
+    highScore: 60,
+    overallHighScore: 50,
+    isNewHighScore: true,
+    isAllTimeHighScore: true,
+  });
+
+  const effects = doc.elements["combo-callouts"].children;
+  const fireworks = effects.filter((child) => child.className.includes("neon-firework"));
+  const trophies = effects.filter((child) => child.className.includes("record-trophy-stage"));
+  const shockwaves = effects.filter((child) => child.className.includes("record-shockwave"));
+
+  assert.equal(doc.elements["game-over"].textContent, "ALL-TIME RECORD");
+  assert.equal(doc.elements["game-over"].classList.contains("all-time-score-title"), true);
+  assert.equal(fireworks.length, 0);
+  assert.equal(trophies.length, 1);
+  assert.equal(trophies[0].children.some((child) => child.className === "record-trophy"), true);
+  assert.equal(shockwaves.length, 0);
+
+  hud.clearCelebration();
+
+  assert.equal(doc.elements["combo-callouts"].children.length, 0);
+  assert.equal(doc.elements["game-over"].classList.contains("all-time-score-title"), false);
+});
+
 test("combo HUD stat has a dedicated contrast treatment", () => {
   const css = fs.readFileSync(path.join(__dirname, "..", "styling.css"), "utf8");
   const accentRule = css.match(/\.hud-stat\.accent\s*\{[^}]+\}/);
@@ -585,6 +799,17 @@ test("profile links use the current GitHub account and omit AngelList", () => {
   assert.match(html, /https:\/\/github\.com\/RayMunozEng/);
   assert.doesNotMatch(html, /AngelList/);
   assert.doesNotMatch(html, /angel\.co/);
+});
+
+test("Google sign-in uses a local branded icon without changing its accessible name", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "styling.css"), "utf8");
+  const iconPath = path.join(__dirname, "..", "src", "images", "google-g.svg");
+
+  assert.match(html, /id="auth-google-btn"[\s\S]*src="src\/images\/google-g\.svg"/);
+  assert.match(html, /<span>Continue with Google<\/span>/);
+  assert.match(css, /\.google-provider-icon\s*\{/);
+  assert.equal(fs.existsSync(iconPath), true);
 });
 
 test("start copy omits the old Neon Skill-Runner subtitle", () => {
@@ -705,4 +930,27 @@ test("new high score styling has golden shine, twinkles, and neon fireworks", ()
   assert.match(css, /@keyframes highScoreGoldShine/);
   assert.match(css, /@keyframes highScoreTwinkle/);
   assert.match(css, /@keyframes neonFireworkBurst/);
+});
+
+test("all-time record styling keeps a responsive reduced-motion 3D trophy", () => {
+  const css = fs.readFileSync(path.join(__dirname, "..", "styling.css"), "utf8");
+
+  assert.match(css, /\.all-time-score-title/);
+  assert.match(css, /\.record-trophy-stage/);
+  assert.match(css, /\.record-trophy\s*\{/);
+  assert.match(css, /transform-style:\s*preserve-3d/);
+  assert.match(css, /@keyframes recordTrophySpin/);
+  assert.doesNotMatch(css, /\.record-shockwave/);
+  assert.match(css, /@media \(max-width:\s*640px\)[\s\S]+\.record-trophy-stage/);
+  assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]+\.record-trophy/);
+});
+
+test("mobile all-time trophy stays compact and inside the record-title edge", () => {
+  const css = fs.readFileSync(path.join(__dirname, "..", "styling.css"), "utf8");
+  const mobileBlock = css.match(/@media \(max-width:\s*640px\)\s*\{[\s\S]*?\n\}/)[0];
+  const trophyRule = mobileBlock.match(/\.record-trophy-stage\s*\{[\s\S]*?\n\s*\}/)[0];
+
+  assert.match(trophyRule, /top:\s*14%;/);
+  assert.match(trophyRule, /right:\s*4px;/);
+  assert.match(trophyRule, /transform:\s*scale\(0\.28\);/);
 });

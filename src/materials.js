@@ -1,12 +1,12 @@
 import { COLORS, GAME_CONFIG } from "./config";
 
-function standardMaterial(THREE, color, emissive = color, intensity = 0.7) {
+function standardMaterial(THREE, color, emissive = color, intensity = 0.7, finish = {}) {
     return new THREE.MeshStandardMaterial({
         color,
         emissive,
         emissiveIntensity: intensity,
-        metalness: 0.35,
-        roughness: 0.28
+        metalness: finish.metalness === undefined ? 0.35 : finish.metalness,
+        roughness: finish.roughness === undefined ? 0.28 : finish.roughness
     });
 }
 
@@ -113,29 +113,39 @@ export function createSharedAssets(THREE) {
     const starTexture = createStarSpriteTexture(THREE);
 
     const geometries = {
-        playerCore: new THREE.SphereBufferGeometry(0.72, 32, 32),
-        playerShell: new THREE.IcosahedronBufferGeometry(0.98, 1),
-        playerRing: new THREE.TorusBufferGeometry(1.1, 0.04, 8, 64),
-        pickupCore: new THREE.IcosahedronBufferGeometry(0.34, 1),
-        pickupRing: new THREE.TorusBufferGeometry(0.66, 0.026, 8, 48),
-        pickupGlint: new THREE.CylinderBufferGeometry(0.028, 0.028, 1.22, 8, 1, true),
-        platformPad: new THREE.CylinderBufferGeometry(2, 2, 0.36, 6),
-        platformNarrowPad: new THREE.CylinderBufferGeometry(1.35, 1.35, 0.36, 6),
-        platformOrbitBand: new THREE.TorusBufferGeometry(2, 0.065, 10, 6),
-        platformNarrowOrbitBand: new THREE.TorusBufferGeometry(1.35, 0.06, 10, 6),
-        platformOrbitBandHalo: new THREE.TorusBufferGeometry(2, 0.13, 10, 6),
-        platformNarrowOrbitBandHalo: new THREE.TorusBufferGeometry(1.35, 0.11, 10, 6),
-        platformTopRail: new THREE.CylinderBufferGeometry(0.044, 0.044, 3.18, 12, 1, true),
-        platformTopRailHalo: new THREE.CylinderBufferGeometry(0.09, 0.09, 3.28, 12, 1, true),
-        platformBeacon: new THREE.CylinderBufferGeometry(0.045, 0.045, 3.2, 10, 1, true),
-        hazardMarker: new THREE.DodecahedronBufferGeometry(0.24, 0),
-        shockwave: new THREE.RingBufferGeometry(0.55, 1.55, 48)
+        playerCore: new THREE.SphereGeometry(0.72, 32, 32),
+        playerShell: new THREE.IcosahedronGeometry(0.98, 2),
+        playerSeam: new THREE.TorusGeometry(0.965, 0.026, 8, 72),
+        playerRing: new THREE.TorusGeometry(1.1, 0.04, 8, 64),
+        pickupCore: new THREE.IcosahedronGeometry(0.34, 1),
+        pickupRing: new THREE.TorusGeometry(0.66, 0.026, 8, 48),
+        pickupGlint: new THREE.CylinderGeometry(0.028, 0.028, 1.22, 8, 1, true),
+        platformPad: new THREE.CylinderGeometry(2, 2, 0.36, 6),
+        platformNarrowPad: new THREE.CylinderGeometry(1.35, 1.35, 0.36, 6),
+        platformOrbitBand: new THREE.TorusGeometry(2, 0.065, 10, 6),
+        platformNarrowOrbitBand: new THREE.TorusGeometry(1.35, 0.06, 10, 6),
+        platformOrbitBandHalo: new THREE.TorusGeometry(2, 0.13, 10, 6),
+        platformNarrowOrbitBandHalo: new THREE.TorusGeometry(1.35, 0.11, 10, 6),
+        platformTopRail: new THREE.CylinderGeometry(0.044, 0.044, 3.18, 12, 1, true),
+        platformTopRailHalo: new THREE.CylinderGeometry(0.09, 0.09, 3.28, 12, 1, true),
+        platformBeacon: new THREE.CylinderGeometry(0.045, 0.045, 3.2, 10, 1, true),
+        hazardMarker: new THREE.DodecahedronGeometry(0.24, 0),
+        shockwave: new THREE.RingGeometry(0.55, 1.55, 48)
     };
 
     const materials = {
         player: {
-            core: standardMaterial(THREE, COLORS.playerCore, COLORS.gold, 0.08),
-            shell: standardMaterial(THREE, COLORS.playerCore, COLORS.gold, 0.06),
+            core: standardMaterial(THREE, COLORS.playerCore, COLORS.gold, 0.12, {
+                metalness: 0.18,
+                roughness: 0.42
+            }),
+            shell: standardMaterial(THREE, COLORS.playerCore, COLORS.playerCore, 0.56, {
+                metalness: 0.08,
+                roughness: 0.52
+            }),
+            seam: basicGlowMaterial(THREE, COLORS.cyan, 0.48),
+            seamAlt: basicGlowMaterial(THREE, COLORS.magenta, 0.44),
+            seamAccent: basicGlowMaterial(THREE, COLORS.gold, 0.34),
             ring: basicGlowMaterial(THREE, COLORS.cyan, 0.9),
             ringAlt: basicGlowMaterial(THREE, COLORS.magenta, 0.86),
             wake: basicGlowMaterial(THREE, COLORS.starGlint, 0.12),

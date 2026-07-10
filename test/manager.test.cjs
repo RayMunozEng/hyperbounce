@@ -101,6 +101,9 @@ test("platform manager seeds an opening runway that reaches the far fade depth",
 
   assert.equal(farthestZ <= GAME_CONFIG.platform.spawnZ, true);
   assert.equal(farthestZ <= GAME_CONFIG.platform.fadeInEndZ, true);
+  assert.equal(manager.active.every((platform) => {
+    return platform.travelGap === Math.abs(GAME_CONFIG.platform.startZ);
+  }), true);
 });
 
 test("platform manager keeps new pads one playable gap behind the farthest active pad", () => {
@@ -117,10 +120,29 @@ test("platform manager keeps new pads one playable gap behind the farthest activ
   }, 0);
   const spawned = manager.spawnNext(1);
 
-  assert.equal(spawned.group.position.z, farthestZ + GAME_CONFIG.platform.startZ);
+  assert.equal(
+    Math.abs((farthestZ - spawned.group.position.z) - spawned.travelGap) < 0.000001,
+    true
+  );
 });
 
-test("platform manager keeps late spawned pads on the tempo gap", () => {
+test("platform spacing opens up immediately instead of waiting until mid-run", () => {
+  const { default: PlatformManager } = loadSourceModule("src/platform_generator.js");
+  const { GAME_CONFIG } = loadSourceModule("src/config.js");
+  const manager = new PlatformManager({
+    PlatformClass: FakePlatform,
+    random: () => 0.9,
+  });
+  const baseGap = Math.abs(GAME_CONFIG.platform.startZ);
+  const firstVariableGap = manager.resolveTravelGap(2);
+
+  assert.equal(baseGap >= 9.5, true);
+  assert.equal(GAME_CONFIG.platform.gapVarianceStartScore, 0);
+  assert.equal(GAME_CONFIG.platform.gapVarianceFullScore <= 22, true);
+  assert.equal(firstVariableGap > baseGap, true);
+});
+
+test("platform manager gives late pads bounded variable travel gaps", () => {
   const { default: PlatformManager } = loadSourceModule("src/platform_generator.js");
   const { GAME_CONFIG } = loadSourceModule("src/config.js");
   const manager = new PlatformManager({
@@ -133,9 +155,35 @@ test("platform manager keeps late spawned pads on the tempo gap", () => {
     return Math.min(minZ, platform.group.position.z);
   }, 0);
   const spawned = manager.spawnNext(GAME_CONFIG.platform.motionFullScore + 20);
-  const gap = spawned.group.position.z - farthestZ;
+  const gap = farthestZ - spawned.group.position.z;
+  const baseGap = Math.abs(GAME_CONFIG.platform.startZ);
 
-  assert.equal(Math.abs(gap - GAME_CONFIG.platform.startZ) < 0.000001, true);
+  assert.equal(Math.abs(spawned.travelGap - gap) < 0.000001, true);
+  assert.equal(gap >= baseGap * (1 - GAME_CONFIG.platform.gapVarianceMax), true);
+  assert.equal(gap <= baseGap * (1 + GAME_CONFIG.platform.gapVarianceMax), true);
+  assert.notEqual(gap, baseGap);
+});
+
+test("platform manager smooths late-run gaps without forcing alternation", () => {
+  const { default: PlatformManager } = loadSourceModule("src/platform_generator.js");
+  const { GAME_CONFIG } = loadSourceModule("src/config.js");
+  const manager = new PlatformManager({
+    PlatformClass: FakePlatform,
+    random: () => 0.9,
+  });
+  const score = GAME_CONFIG.platform.gapVarianceFullScore;
+  const baseGap = Math.abs(GAME_CONFIG.platform.startZ);
+
+  const firstGap = manager.resolveTravelGap(score);
+  const secondGap = manager.resolveTravelGap(score);
+
+  assert.equal(firstGap > baseGap, true);
+  assert.equal(secondGap > baseGap, true);
+  assert.equal(
+    Math.abs(secondGap - firstGap) <=
+      baseGap * GAME_CONFIG.platform.gapVarianceMaxStep + 0.000001,
+    true
+  );
 });
 
 test("platform manager keeps early spawned pads stationary", () => {
@@ -170,7 +218,7 @@ test("platform manager unlocks gentle motion later in the run", () => {
   assert.equal(spawned.motion.phase > 0, true);
 });
 
-test("platform manager releases the start-screen launch pad before play", () => {
+test("platform manager keeps the cleared launch pad moving with the runway", () => {
   const { default: PlatformManager } = loadSourceModule("src/platform_generator.js");
   const { GAME_CONFIG } = loadSourceModule("src/config.js");
   const manager = new PlatformManager({
@@ -180,12 +228,19 @@ test("platform manager releases the start-screen launch pad before play", () => 
 
   manager.reset();
   const launchPad = manager.current();
+  const startZ = launchPad.group.position.z;
 
   manager.releaseLaunchPad();
 
-  assert.equal(launchPad.active, false);
-  assert.equal(manager.active.includes(launchPad), false);
+  assert.equal(launchPad.active, true);
+  assert.equal(launchPad.group.visible, true);
+  assert.equal(launchPad.isCleared, true);
+  assert.equal(manager.active.includes(launchPad), true);
   assert.equal(manager.current().group.position.z, GAME_CONFIG.platform.startZ);
+
+  manager.update(0.5, 0.4);
+
+  assert.equal(launchPad.group.position.z > startZ, true);
 });
 
 test("platform manager can hide and restore all seeded gameplay platforms", () => {

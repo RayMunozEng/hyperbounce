@@ -23,6 +23,7 @@ export default class PlatformManager {
         this.platformArr = this.active;
         this.spawnIndex = 0;
         this.lastX = 0;
+        this.lastGapOffset = 0;
 
         for (let i = 0; i < GAME_CONFIG.platform.poolSize; i++) {
             this.pool.push(new PlatformClass({ THREE, scene, assets }));
@@ -34,17 +35,22 @@ export default class PlatformManager {
         this.active.length = 0;
         this.spawnIndex = 0;
         this.lastX = 0;
+        this.lastGapOffset = 0;
 
         let z = GAME_CONFIG.platform.landingZ;
-        while (this.shouldSeedOpeningRunway(z)) {
+        while (this.shouldSeedOpeningRunway()) {
             if (!this.activatePlatform("standard", 0, z)) break;
             z += GAME_CONFIG.platform.startZ;
         }
     }
 
-    shouldSeedOpeningRunway(nextZ) {
+    shouldSeedOpeningRunway() {
+        const farthestZ = this.active.reduce((minZ, platform) => {
+            return Math.min(minZ, platform.group.position.z);
+        }, GAME_CONFIG.platform.landingZ);
+
         return this.active.length < GAME_CONFIG.platform.openingCount ||
-            nextZ >= GAME_CONFIG.platform.spawnZ;
+            farthestZ > GAME_CONFIG.platform.spawnZ;
     }
 
     current() {
@@ -64,8 +70,7 @@ export default class PlatformManager {
 
         if (!launchPad) return null;
 
-        launchPad.deactivate();
-        this.active.splice(this.active.indexOf(launchPad), 1);
+        launchPad.isCleared = true;
         return launchPad;
     }
 
@@ -102,25 +107,57 @@ export default class PlatformManager {
         const farthestZ = this.active.reduce((minZ, platform) => {
             return Math.min(minZ, platform.group.position.z);
         }, 0);
-        const z = farthestZ + GAME_CONFIG.platform.startZ;
+        const travelGap = this.resolveTravelGap(score);
+        const z = farthestZ - travelGap;
         const x = this.nextX(score);
         const type = this.chooseType(score);
         const motion = this.resolveMotion(score);
 
-        return this.activatePlatform(type, x, z, motion);
+        return this.activatePlatform(type, x, z, motion, travelGap);
     }
 
-    activatePlatform(type, x, z, motion = { enabled: false }) {
+    activatePlatform(
+        type,
+        x,
+        z,
+        motion = { enabled: false },
+        travelGap = Math.abs(GAME_CONFIG.platform.startZ)
+    ) {
         const platform = this.pool.find((candidate) => !candidate.active);
 
         if (!platform) return null;
 
         platform.activate(type, x, z, this.spawnIndex, motion);
+        platform.travelGap = Math.max(0.001, Math.abs(travelGap));
         platform.isCleared = false;
         this.active.push(platform);
         this.spawnIndex += 1;
         this.lastX = x;
         return platform;
+    }
+
+    resolveTravelGap(score) {
+        const config = GAME_CONFIG.platform;
+        const baseGap = Math.abs(config.startZ);
+        const progress = clamp(
+            (score - config.gapVarianceStartScore) /
+                Math.max(1, config.gapVarianceFullScore - config.gapVarianceStartScore),
+            0,
+            1
+        );
+
+        if (progress === 0) return baseGap;
+
+        const variance = progress * config.gapVarianceMax;
+        const targetOffset = (this.random() * 2 - 1) * variance;
+        const maxStep = Math.min(config.gapVarianceMaxStep, variance);
+        this.lastGapOffset += clamp(
+            targetOffset - this.lastGapOffset,
+            -maxStep,
+            maxStep
+        );
+        this.lastGapOffset = clamp(this.lastGapOffset, -variance, variance);
+        return baseGap * (1 + this.lastGapOffset);
     }
 
     chooseType(score) {

@@ -6,6 +6,14 @@ export function createJumpSfx({ HowlClass }) {
     });
 }
 
+export function createDeathSfx({ HowlClass }) {
+    return createSfx({
+        HowlClass,
+        src: "./src/sounds/gravity-rift-death.wav",
+        volume: 0.46
+    });
+}
+
 export function createOrbSfx({ HowlClass }) {
     const sounds = {
         collect: createSfx({
@@ -89,12 +97,39 @@ export function createComboSfx({ HowlClass }) {
     };
 }
 
+export function createLaunchSfx({ HowlClass }) {
+    const sounds = {
+        countdown: createSfx({
+            HowlClass,
+            src: "./src/sounds/countdown-pulse.wav",
+            volume: 0.38
+        }),
+        start: createSfx({
+            HowlClass,
+            src: "./src/sounds/launch-start.wav",
+            volume: 0.5
+        })
+    };
+
+    return {
+        ...sounds,
+        mute(isMuted) {
+            muteSfxGroup(sounds, isMuted);
+        }
+    };
+}
+
 export function createHighScoreSfx({ HowlClass }) {
     const sounds = {
         fanfare: createSfx({
             HowlClass,
             src: "./src/sounds/high-score-fanfare.wav",
             volume: 0.42
+        }),
+        allTimeFanfare: createSfx({
+            HowlClass,
+            src: "./src/sounds/all-time-record-fanfare.wav",
+            volume: 0.52
         })
     };
 
@@ -225,6 +260,7 @@ export class CrossfadeMusic {
     setRate(rate) {
         this.rate = rate;
         this.tracks.forEach((track) => this.applyRateToTrack(track));
+        if (this.isPlaying) this.scheduleCrossfade();
     }
 
     applyRateToTrack(track) {
@@ -250,7 +286,8 @@ export class CrossfadeMusic {
     }
 
     scheduleCrossfade() {
-        const duration = this.activeTrack().duration();
+        const track = this.activeTrack();
+        const duration = track.duration();
         const fadeSeconds = this.fadeMs / 1000;
 
         if (!duration || duration <= fadeSeconds + 0.25) {
@@ -259,7 +296,11 @@ export class CrossfadeMusic {
             return;
         }
 
-        const delay = (duration - fadeSeconds) * 1000;
+        const seek = typeof track.seek === "function" ? Number(track.seek()) : 0;
+        const elapsedSeconds = Number.isFinite(seek) ? Math.max(0, seek) : 0;
+        const playbackRate = Number.isFinite(this.rate) && this.rate > 0 ? this.rate : 1;
+        const remainingSeconds = Math.max(0, (duration - elapsedSeconds) / playbackRate);
+        const delay = Math.max(0, (remainingSeconds - fadeSeconds) * 1000);
 
         this.clearTimer(this.timer);
         this.timer = this.setTimer(() => this.crossfade(), delay);

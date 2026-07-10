@@ -45,13 +45,41 @@ function makeFakeHowl(log) {
     duration() {
       return 10;
     }
+
+    seek() {
+      return this.seekValue || 0;
+    }
   };
 }
+
+test("the release soundtrack is compressed for web delivery", () => {
+  const gameSource = fs.readFileSync("src/game.js", "utf8");
+  const soundtrackPath = "src/sounds/neon-runner.mp3";
+
+  assert.match(gameSource, /neon-runner\.mp3/);
+  assert.doesNotMatch(gameSource, /neon-runner\.wav/);
+  assert.ok(fs.existsSync(soundtrackPath), "compressed soundtrack is missing");
+  assert.ok(fs.statSync(soundtrackPath).size < 6 * 1024 * 1024, "soundtrack exceeds the web size budget");
+  assert.ok(!fs.existsSync("src/sounds/neon-runner.wav"), "uncompressed soundtrack should not ship");
+});
 
 function makeLoadingHowl(log) {
   return class LoadingHowl extends makeFakeHowl(log) {
     duration() {
       return 0;
+    }
+  };
+}
+
+function makeDeferredHowl(log) {
+  return class DeferredHowl extends makeFakeHowl(log) {
+    constructor(options) {
+      super(options);
+      this.durationValue = 0;
+    }
+
+    duration() {
+      return this.durationValue;
     }
   };
 }
@@ -110,6 +138,8 @@ function readWavStats(filePath) {
     duration,
     onset: segment(0.02, 0.12),
     body: segment(0.08, 0.24),
+    pull: segment(0.48, 0.72),
+    implode: segment(0.94, 1.14),
     tail: segment(Math.max(0, duration - 0.1), duration),
   };
 }
@@ -166,6 +196,53 @@ test("crossfade music looper waits when duration is not loaded yet", () => {
 
   assert.equal(scheduled[0].delay, 1000);
   assert.equal(log.calls.some((call) => call[0] === "fade"), false);
+});
+
+test("crossfade music subtracts elapsed playback after duration finishes loading", () => {
+  const { CrossfadeMusic } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+  const scheduled = [];
+  const looper = new CrossfadeMusic({
+    HowlClass: makeDeferredHowl(log),
+    src: ["song.wav"],
+    volume: 0.6,
+    fadeSeconds: 2,
+    setTimer(fn, delay) {
+      scheduled.push({ fn, delay });
+      return scheduled.length;
+    },
+    clearTimer() {},
+  });
+
+  looper.play();
+  log.instances[0].durationValue = 10;
+  log.instances[0].seekValue = 1;
+  scheduled[0].fn();
+
+  assert.equal(scheduled[1].delay, 7000);
+});
+
+test("crossfade music reschedules the handoff when playback rate changes", () => {
+  const { CrossfadeMusic } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+  const scheduled = [];
+  const looper = new CrossfadeMusic({
+    HowlClass: makeFakeHowl(log),
+    src: ["song.wav"],
+    volume: 0.6,
+    fadeSeconds: 2,
+    setTimer(fn, delay) {
+      scheduled.push({ fn, delay });
+      return scheduled.length;
+    },
+    clearTimer() {},
+  });
+
+  looper.play();
+  log.instances[0].seekValue = 2;
+  looper.setRate(2);
+
+  assert.equal(scheduled[scheduled.length - 1].delay, 2000);
 });
 
 test("crossfade music can start quietly and fade up to run volume", () => {
@@ -331,19 +408,50 @@ test("combo SFX helper maps multiplier milestones to an exciting cue", () => {
   assert.deepEqual(log.calls.slice(-1), [["mute", true]]);
 });
 
-test("high score SFX helper maps fanfare to a distinct celebration cue", () => {
+test("launch SFX helper reuses one countdown pulse and a distinct start cue", () => {
+  const { createLaunchSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const launch = createLaunchSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 2);
+  assert.deepEqual(launch.countdown.options.src, ["./src/sounds/countdown-pulse.wav"]);
+  assert.deepEqual(launch.start.options.src, ["./src/sounds/launch-start.wav"]);
+  assert.equal(launch.countdown.options.volume, 0.38);
+  assert.equal(launch.start.options.volume, 0.5);
+
+  launch.mute(true);
+
+  assert.deepEqual(log.calls.slice(-2), [["mute", true], ["mute", true]]);
+});
+
+test("death SFX helper preloads the full Gravity Rift cue", () => {
+  const { createDeathSfx } = loadSourceModule("src/audio.js");
+  const log = { calls: [], instances: [] };
+
+  const death = createDeathSfx({ HowlClass: makeFakeHowl(log) });
+
+  assert.equal(log.instances.length, 1);
+  assert.deepEqual(death.options.src, ["./src/sounds/gravity-rift-death.wav"]);
+  assert.equal(death.options.volume >= 0.4, true);
+  assert.equal(death.options.volume < 0.55, true);
+});
+
+test("high score SFX helper maps personal and all-time records to distinct cues", () => {
   const { createHighScoreSfx } = loadSourceModule("src/audio.js");
   const log = { calls: [], instances: [] };
 
   const highScore = createHighScoreSfx({ HowlClass: makeFakeHowl(log) });
 
-  assert.equal(log.instances.length, 1);
+  assert.equal(log.instances.length, 2);
   assert.deepEqual(highScore.fanfare.options.src, ["./src/sounds/high-score-fanfare.wav"]);
+  assert.deepEqual(highScore.allTimeFanfare.options.src, ["./src/sounds/all-time-record-fanfare.wav"]);
   assert.equal(highScore.fanfare.options.volume >= 0.36, true);
+  assert.equal(highScore.allTimeFanfare.options.volume > highScore.fanfare.options.volume, true);
 
   highScore.mute(true);
 
-  assert.deepEqual(log.calls.slice(-1), [["mute", true]]);
+  assert.deepEqual(log.calls.slice(-2), [["mute", true], ["mute", true]]);
 });
 
 test("orb SFX assets are short and tonally distinct", () => {
@@ -389,6 +497,28 @@ test("combo milestone SFX asset is bright, upbeat, and clean", () => {
   assert.ok(combo.tail.rms < combo.body.rms * 0.45, "combo cue should taper cleanly");
 });
 
+test("launch SFX assets rise from a compact pulse into a clean start chord", () => {
+  const countdown = readWavStats("src/sounds/countdown-pulse.wav");
+  const start = readWavStats("src/sounds/launch-start.wav");
+
+  assert.ok(countdown.duration <= 0.3, "countdown pulse should stay tightly synced to each number");
+  assert.ok(start.duration <= 0.85, "start cue should clear quickly for gameplay audio");
+  assert.ok(start.body.zeroCrossHz > countdown.body.zeroCrossHz, "start cue should open brighter than the pulse");
+  assert.ok(countdown.tail.rms < countdown.body.rms * 0.42, "countdown pulse should fade cleanly");
+  assert.ok(start.tail.rms < start.body.rms * 0.42, "start cue should fade cleanly");
+  assert.ok(start.body.peak < 0.95, "start cue should avoid clipping");
+});
+
+test("Gravity Rift death SFX follows the complete animation without clipping", () => {
+  const death = readWavStats("src/sounds/gravity-rift-death.wav");
+
+  assert.ok(Math.abs(death.duration - 1.26) < 0.015, "death cue should match the 1.26 second animation");
+  assert.ok(death.pull.zeroCrossHz < death.body.zeroCrossHz, "rift pull should descend below the opening wobble");
+  assert.ok(death.implode.peak > death.pull.peak, "implosion should land as the strongest transient");
+  assert.ok(death.implode.peak < 0.95, "implosion should avoid clipping");
+  assert.ok(death.tail.rms < death.implode.rms * 0.3, "death cue should end cleanly with the animation");
+});
+
 test("high score fanfare SFX asset is celebratory and compact", () => {
   const fanfare = readWavStats("src/sounds/high-score-fanfare.wav");
 
@@ -396,6 +526,17 @@ test("high score fanfare SFX asset is celebratory and compact", () => {
   assert.ok(fanfare.body.zeroCrossHz > 600, "fanfare should feel lifted");
   assert.ok(fanfare.body.peak < 0.95, "fanfare should avoid clipping");
   assert.ok(fanfare.tail.rms < fanfare.body.rms * 0.5, "fanfare should fade cleanly");
+});
+
+test("all-time record fanfare is larger than the personal fanfare without clipping", () => {
+  const personal = readWavStats("src/sounds/high-score-fanfare.wav");
+  const allTime = readWavStats("src/sounds/all-time-record-fanfare.wav");
+
+  assert.ok(allTime.duration > personal.duration, "all-time fanfare should have a larger phrase");
+  assert.ok(allTime.duration <= 2, "all-time fanfare should not stall retry flow");
+  assert.ok(allTime.body.zeroCrossHz > 700, "all-time fanfare should feel bright and triumphant");
+  assert.ok(allTime.body.peak < 0.95, "all-time fanfare should avoid clipping");
+  assert.ok(allTime.tail.rms < allTime.body.rms * 0.45, "all-time fanfare should fade cleanly");
 });
 
 test("jump SFX asset has a deeper body and a gentle tail", () => {
