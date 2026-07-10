@@ -12,7 +12,11 @@ const ELEMENT_IDS = {
     leaderboardPanel: "leaderboard-panel",
     leaderboardList: "leaderboard-list",
     leaderboardEmpty: "leaderboard-empty",
+    leaderboardProfile: "leaderboard-profile",
+    leaderboardPlayerName: "leaderboard-player-name",
+    leaderboardRenameButton: "leaderboard-rename-btn",
     leaderboardForm: "leaderboard-form",
+    leaderboardFormLabel: "leaderboard-form-label",
     leaderboardName: "leaderboard-name",
     leaderboardSubmit: "leaderboard-submit",
     leaderboardMessage: "leaderboard-message",
@@ -61,6 +65,8 @@ export class Hud {
         this.document = doc;
         this.elements = {};
         this.introHandoffTimer = null;
+        this.leaderboardFormMode = "score";
+        this.leaderboardPlayerName = "";
 
         Object.keys(ELEMENT_IDS).forEach((key) => {
             this.elements[key] = this.document.getElementById(ELEMENT_IDS[key]);
@@ -73,6 +79,14 @@ export class Hud {
         if (sound && this.elements.soundButton) this.elements.soundButton.addEventListener("click", sound);
         if (submitScore && this.elements.leaderboardForm) {
             this.elements.leaderboardForm.addEventListener("submit", submitScore);
+        }
+        if (this.elements.leaderboardRenameButton) {
+            this.elements.leaderboardRenameButton.addEventListener("click", () => {
+                this.showLeaderboardPrompt(true, {
+                    mode: "rename",
+                    name: this.leaderboardPlayerName
+                });
+            });
         }
         if (signInGoogle && this.elements.authGoogleButton) {
             this.elements.authGoogleButton.addEventListener("click", signInGoogle);
@@ -229,13 +243,46 @@ export class Hud {
         this.setVisible(this.elements.overallStat, isAvailable);
     }
 
-    showLeaderboardPrompt(isVisible) {
+    showLeaderboardPrompt(isVisible, { mode = "score", name = "" } = {}) {
         this.setVisible(this.elements.leaderboardForm, isVisible);
+        this.leaderboardFormMode = isVisible ? mode : "score";
+
         if (isVisible) {
+            const isRename = mode === "rename";
+
+            if (this.elements.leaderboardFormLabel) {
+                this.elements.leaderboardFormLabel.textContent = isRename ?
+                    "Choose a new name" :
+                    "Name for the board";
+            }
+            if (this.elements.leaderboardName && isRename) {
+                this.elements.leaderboardName.value = name;
+            }
+            if (this.elements.leaderboardSubmit) {
+                this.elements.leaderboardSubmit.textContent = isRename ? "Change" : "Save";
+            }
             this.setLeaderboardSubmitState({
                 status: "idle",
-                message: "Top 10 score. Add your name."
+                message: isRename ? "Names must be unique." : "Top 10 score. Add your name."
             });
+        }
+    }
+
+    readLeaderboardFormMode() {
+        return this.leaderboardFormMode;
+    }
+
+    setLeaderboardProfile({ isSignedIn = false, playerName = "" } = {}) {
+        const name = String(playerName || "");
+        const isVisible = isSignedIn && Boolean(name);
+
+        this.leaderboardPlayerName = name;
+        this.setVisible(this.elements.leaderboardProfile, isVisible);
+        if (this.elements.leaderboardPlayerName) {
+            this.elements.leaderboardPlayerName.textContent = isVisible ? `Flying as ${name}` : "";
+        }
+        if (!isVisible && this.leaderboardFormMode === "rename") {
+            this.showLeaderboardPrompt(false);
         }
     }
 

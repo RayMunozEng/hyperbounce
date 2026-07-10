@@ -78,3 +78,52 @@ test("leaderboard client sends bearer token when authenticated", async () => {
 
   assert.deepEqual(authHeaders, ["Bearer token-123", "Bearer token-123"]);
 });
+
+test("leaderboard client renames the authenticated player", async () => {
+  const { LeaderboardClient } = loadSourceModule("src/leaderboard.js");
+  const requests = [];
+  const client = new LeaderboardClient({
+    endpoint: "https://scores.example.dev",
+    tokenProvider: () => "token-123",
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        json: async () => ({
+          entries: [{ name: "Nova", score: 24 }],
+          overallHighScore: 24,
+          playerName: "Nova",
+          nameChanged: true,
+        }),
+      };
+    },
+  });
+
+  const result = await client.rename("Nova");
+
+  assert.equal(result.playerName, "Nova");
+  assert.equal(result.nameChanged, true);
+  assert.equal(requests[0].options.method, "PATCH");
+  assert.equal(requests[0].options.headers.Authorization, "Bearer token-123");
+  assert.deepEqual(JSON.parse(requests[0].options.body), { name: "Nova" });
+});
+
+test("leaderboard client preserves name conflict details", async () => {
+  const { LeaderboardClient } = loadSourceModule("src/leaderboard.js");
+  const client = new LeaderboardClient({
+    endpoint: "https://scores.example.dev",
+    fetchImpl: async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        code: "NAME_TAKEN",
+        error: "Name already taken",
+      }),
+    }),
+  });
+
+  await assert.rejects(
+    () => client.rename("Ray"),
+    (error) => error.code === "NAME_TAKEN" && error.status === 409
+  );
+});

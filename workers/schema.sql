@@ -7,3 +7,6 @@ CREATE TABLE IF NOT EXISTS hyperbounce_scores (
 
 CREATE INDEX IF NOT EXISTS hyperbounce_scores_ranking
 ON hyperbounce_scores (score DESC, submitted_at ASC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS hyperbounce_scores_name_unique
+ON hyperbounce_scores (name COLLATE NOCASE);

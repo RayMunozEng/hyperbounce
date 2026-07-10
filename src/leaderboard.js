@@ -85,6 +85,7 @@ export function normalizeLeaderboardPayload(payload = {}) {
         entries,
         overallHighScore: Math.max(clampScore(payload.overallHighScore), resolveOverallHighScore(entries)),
         playerName: sanitizeLeaderboardName(payload.playerName),
+        nameChanged: Boolean(payload.nameChanged),
         accepted: Boolean(payload.accepted),
         rank: Number.isFinite(Number(payload.rank)) ? Number(payload.rank) : null
     };
@@ -168,11 +169,37 @@ export class LeaderboardClient {
         }).then((response) => this.parseResponse(response));
     }
 
-    parseResponse(response) {
-        if (!response || !response.ok) {
-            return Promise.reject(new Error("Leaderboard request failed"));
-        }
+    rename(name) {
+        if (!this.isEnabled()) return Promise.resolve(normalizeLeaderboardPayload());
 
-        return response.json().then((payload) => normalizeLeaderboardPayload(payload));
+        return this.fetch(this.url(), {
+            method: "PATCH",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+                ...this.authHeaders()
+            },
+            body: JSON.stringify({
+                name: sanitizeLeaderboardName(name)
+            })
+        }).then((response) => this.parseResponse(response));
+    }
+
+    parseResponse(response) {
+        const payloadRequest = response && typeof response.json === "function" ?
+            response.json().catch(() => ({})) :
+            Promise.resolve({});
+
+        return payloadRequest.then((payload) => {
+            if (!response || !response.ok) {
+                const error = new Error(payload.error || "Leaderboard request failed");
+
+                error.code = payload.code || "LEADERBOARD_REQUEST_FAILED";
+                error.status = response ? Number(response.status) || 0 : 0;
+                throw error;
+            }
+
+            return normalizeLeaderboardPayload(payload);
+        });
     }
 }

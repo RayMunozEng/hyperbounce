@@ -891,6 +891,23 @@ a {
     margin: 0;
 }
 
+.leaderboard-profile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.leaderboard-profile small {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .leaderboard-form {
     display: grid;
     gap: 6px;

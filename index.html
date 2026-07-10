@@ -62,8 +62,12 @@
                 </div>
                 <ol id="leaderboard-list" class="leaderboard-list"></ol>
                 <p id="leaderboard-empty" class="leaderboard-empty">No scores yet.</p>
+                <div id="leaderboard-profile" class="leaderboard-profile hidden">
+                    <small id="leaderboard-player-name"></small>
+                    <button id="leaderboard-rename-btn" class="auth-link" type="button">Change name</button>
+                </div>
                 <form id="leaderboard-form" class="leaderboard-form hidden">
-                    <label for="leaderboard-name">Name for the board</label>
+                    <label id="leaderboard-form-label" for="leaderboard-name">Name for the board</label>
                     <div class="leaderboard-input-row">
                         <input id="leaderboard-name" maxlength="16" autocomplete="nickname" placeholder="Your name">
                         <button id="leaderboard-submit" class="primary-action compact" type="submit">Save</button>

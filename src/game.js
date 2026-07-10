@@ -121,6 +121,7 @@ export default class Game {
         this.lastCelebratedOverallScore = 0;
         this.leaderboardEntries = [];
         this.leaderboardName = "";
+        this.isSignedIn = false;
         this.score = 0;
         this.multiplier = 1;
         this.speed = GAME_CONFIG.run.baseSpeed;
@@ -147,7 +148,9 @@ export default class Game {
         this.restart = this.restart.bind(this);
         this.toggleSound = this.toggleSound.bind(this);
         this.playUiHoverSfx = this.playUiHoverSfx.bind(this);
+        this.submitLeaderboardForm = this.submitLeaderboardForm.bind(this);
         this.submitLeaderboardScore = this.submitLeaderboardScore.bind(this);
+        this.renameLeaderboardName = this.renameLeaderboardName.bind(this);
         this.signInGoogle = this.signInGoogle.bind(this);
         this.sendEmailLink = this.sendEmailLink.bind(this);
         this.signOut = this.signOut.bind(this);
@@ -157,7 +160,7 @@ export default class Game {
             start: this.start,
             retry: this.restart,
             sound: this.toggleSound,
-            submitScore: this.submitLeaderboardScore,
+            submitScore: this.submitLeaderboardForm,
             signInGoogle: this.signInGoogle,
             sendEmailLink: this.sendEmailLink,
             signOut: this.signOut,
@@ -735,6 +738,7 @@ export default class Game {
             this.overallHighScore
         );
         if (this.hud.setLeaderboardAvailability) this.hud.setLeaderboardAvailability(true);
+        this.syncLeaderboardProfile();
         this.hud.setLeaderboard({
             entries: this.leaderboardEntries,
             overallHighScore: this.overallHighScore
@@ -784,9 +788,20 @@ export default class Game {
             email,
             message: message || (isSignedIn ? "Signed in" : "Sign in to save top scores.")
         });
+        this.isSignedIn = isSignedIn;
         if (!isSignedIn) this.leaderboardName = "";
+        this.syncLeaderboardProfile();
 
         return session;
+    }
+
+    syncLeaderboardProfile() {
+        if (!this.hud || !this.hud.setLeaderboardProfile) return;
+
+        this.hud.setLeaderboardProfile({
+            isSignedIn: Boolean(this.isSignedIn),
+            playerName: this.leaderboardName
+        });
     }
 
     signInGoogle() {
@@ -871,6 +886,62 @@ export default class Game {
             });
     }
 
+    submitLeaderboardForm(event) {
+        const mode = this.hud && this.hud.readLeaderboardFormMode ?
+            this.hud.readLeaderboardFormMode() :
+            "score";
+
+        return mode === "rename" ?
+            this.renameLeaderboardName(event) :
+            this.submitLeaderboardScore(event);
+    }
+
+    renameLeaderboardName(event) {
+        if (event && event.preventDefault) event.preventDefault();
+        if (!this.leaderboardClient || !this.leaderboardClient.isEnabled || !this.leaderboardClient.isEnabled()) {
+            return Promise.resolve();
+        }
+
+        if (this.authClient && this.authClient.getAccessToken && !this.authClient.getAccessToken()) {
+            this.hud.setLeaderboardSubmitState({
+                status: "error",
+                message: "Sign in first"
+            });
+            return Promise.resolve();
+        }
+
+        const name = this.hud.readLeaderboardName();
+        if (!name) {
+            this.hud.setLeaderboardSubmitState({
+                status: "error",
+                message: "Enter a name first"
+            });
+            return Promise.resolve();
+        }
+
+        this.hud.setLeaderboardSubmitState({
+            status: "saving",
+            message: "Changing name..."
+        });
+
+        return this.leaderboardClient.rename(name)
+            .then((result) => {
+                this.applyLeaderboard(result);
+                this.hud.setLeaderboardSubmitState({
+                    status: "success",
+                    message: "Name changed successfully."
+                });
+            })
+            .catch((error) => {
+                this.hud.setLeaderboardSubmitState({
+                    status: "error",
+                    message: error && error.code === "NAME_TAKEN" ?
+                        "That name is taken. Choose another." :
+                        "Could not change name"
+                });
+            });
+    }
+
     submitLeaderboardScore(event, savedName = "") {
         if (event && event.preventDefault) event.preventDefault();
         if (!this.leaderboardClient || !this.leaderboardClient.isEnabled || !this.leaderboardClient.isEnabled()) {
@@ -911,10 +982,12 @@ export default class Game {
                     message: result.accepted ? "Leaderboard updated" : "Score missed the top 10"
                 });
             })
-            .catch(() => {
+            .catch((error) => {
                 this.hud.setLeaderboardSubmitState({
                     status: "error",
-                    message: "Could not save score"
+                    message: error && error.code === "NAME_TAKEN" ?
+                        "That name is taken. Choose another." :
+                        "Could not save score"
                 });
             });
     }

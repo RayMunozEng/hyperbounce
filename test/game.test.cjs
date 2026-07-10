@@ -1050,6 +1050,101 @@ test("game asks players to sign in before saving leaderboard scores", async () =
   assert.deepEqual(calls, [["state", "error", "Sign in first"]]);
 });
 
+test("game changes the account name and refreshes the leaderboard", async () => {
+  const { default: Game } = loadSourceModule("src/game.js");
+  const calls = [];
+  const game = {
+    leaderboardName: "Ray",
+    leaderboardEntries: [{ name: "Ray", score: 72 }],
+    overallHighScore: 72,
+    isSignedIn: true,
+    hud: {
+      readLeaderboardName() {
+        return "Nova";
+      },
+      setLeaderboardSubmitState(state) {
+        calls.push(["state", state.status, state.message]);
+      },
+      setLeaderboard(payload) {
+        calls.push(["leaderboard", payload.entries[0].name]);
+      },
+      setLeaderboardAvailability() {},
+      setLeaderboardProfile(profile) {
+        calls.push(["profile", profile.isSignedIn, profile.playerName]);
+      },
+    },
+    authClient: {
+      getAccessToken() {
+        return "token-123";
+      },
+    },
+    leaderboardClient: {
+      isEnabled() {
+        return true;
+      },
+      async rename(name) {
+        calls.push(["rename", name]);
+        return {
+          nameChanged: true,
+          playerName: "Nova",
+          overallHighScore: 72,
+          entries: [{ name: "Nova", score: 72 }],
+        };
+      },
+    },
+  };
+
+  Object.setPrototypeOf(game, Game.prototype);
+  await Game.prototype.renameLeaderboardName.call(game, { preventDefault() {} });
+
+  assert.deepEqual(calls, [
+    ["state", "saving", "Changing name..."],
+    ["rename", "Nova"],
+    ["profile", true, "Nova"],
+    ["leaderboard", "Nova"],
+    ["state", "success", "Name changed successfully."],
+  ]);
+  assert.equal(game.leaderboardName, "Nova");
+});
+
+test("game prompts for another name when the requested name is taken", async () => {
+  const { default: Game } = loadSourceModule("src/game.js");
+  const calls = [];
+  const conflict = new Error("Name already taken");
+  conflict.code = "NAME_TAKEN";
+  const game = {
+    hud: {
+      readLeaderboardName() {
+        return "Ray";
+      },
+      setLeaderboardSubmitState(state) {
+        calls.push([state.status, state.message]);
+      },
+    },
+    authClient: {
+      getAccessToken() {
+        return "token-123";
+      },
+    },
+    leaderboardClient: {
+      isEnabled() {
+        return true;
+      },
+      rename() {
+        return Promise.reject(conflict);
+      },
+    },
+  };
+
+  Object.setPrototypeOf(game, Game.prototype);
+  await Game.prototype.renameLeaderboardName.call(game, { preventDefault() {} });
+
+  assert.deepEqual(calls, [
+    ["saving", "Changing name..."],
+    ["error", "That name is taken. Choose another."],
+  ]);
+});
+
 test("game keeps a sign-in event authoritative over a stale guest startup response", async () => {
   const { default: Game } = loadSourceModule("src/game.js");
   const { SupabaseAuthClient } = loadSourceModule("src/auth.js");

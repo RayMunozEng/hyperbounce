@@ -471,6 +471,38 @@ test("HUD renders auth state and binds login controls", () => {
   assert.equal(doc.elements["auth-message"].textContent, "Signed in");
 });
 
+test("HUD opens the shared name form in rename mode for signed-in players", () => {
+  const { Hud } = loadSourceModule("src/hud.js");
+  const doc = makeDocument([
+    "leaderboard-form",
+    "leaderboard-form-label",
+    "leaderboard-name",
+    "leaderboard-submit",
+    "leaderboard-message",
+    "leaderboard-profile",
+    "leaderboard-player-name",
+    "leaderboard-rename-btn",
+  ]);
+  const hud = new Hud(doc);
+
+  hud.bindControls({});
+  hud.setLeaderboardProfile({ isSignedIn: true, playerName: "Ray" });
+  doc.elements["leaderboard-rename-btn"].listeners.click();
+
+  assert.equal(doc.elements["leaderboard-profile"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["leaderboard-player-name"].textContent, "Flying as Ray");
+  assert.equal(doc.elements["leaderboard-form"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["leaderboard-form-label"].textContent, "Choose a new name");
+  assert.equal(doc.elements["leaderboard-name"].value, "Ray");
+  assert.equal(doc.elements["leaderboard-submit"].textContent, "Change");
+  assert.equal(hud.readLeaderboardFormMode(), "rename");
+  assert.equal(doc.elements["leaderboard-message"].textContent, "Names must be unique.");
+
+  hud.setLeaderboardProfile({ isSignedIn: false, playerName: "" });
+  assert.equal(doc.elements["leaderboard-profile"].classList.contains("hidden"), true);
+  assert.equal(doc.elements["leaderboard-form"].classList.contains("hidden"), true);
+});
+
 test("HUD hides online services until production configuration is available", () => {
   const { Hud } = loadSourceModule("src/hud.js");
   const doc = makeDocument([
@@ -516,6 +548,14 @@ test("release markup starts optional online panels hidden without deployment pla
   assert.match(html, /id="overall-stat" class="hud-stat hidden"[\s\S]*?<span class="hud-label">Overall<\/span>[\s\S]*?id="overall-highscore"/);
   assert.doesNotMatch(html, /id="overall-stat"[\s\S]*?<span class="hud-label">Score<\/span>/);
   assert.doesNotMatch(html, /connect(?:s)? after deployment/i);
+});
+
+test("release markup includes the account name editor controls", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+
+  assert.match(html, /id="leaderboard-profile" class="leaderboard-profile hidden"/);
+  assert.match(html, /id="leaderboard-rename-btn"[^>]*>Change name<\/button>/);
+  assert.match(html, /id="leaderboard-form-label"/);
 });
 
 test("HUD never reuses the intro panel reveal for game over", () => {

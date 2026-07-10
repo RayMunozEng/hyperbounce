@@ -69,13 +69,38 @@ function makeEnv(fetchImpl) {
           };
         },
         async first() {
+          if (/COLLATE\s+NOCASE/i.test(sql)) {
+            const requestedName = String(values[0] || "").toLowerCase();
+            const match = [...scores.values()].find(
+              (entry) => entry.name.toLowerCase() === requestedName
+            );
+            return match ? { userId: match.userId } : null;
+          }
+
           const entry = scores.get(String(values[0]));
           return entry ? { name: entry.name, score: entry.score } : null;
         },
         async run() {
+          if (/UPDATE\s+hyperbounce_scores\s+SET\s+name/i.test(sql)) {
+            const [name, userId] = values;
+            const current = scores.get(userId);
+            const duplicate = [...scores.values()].find(
+              (entry) => entry.userId !== userId && entry.name.toLowerCase() === name.toLowerCase()
+            );
+
+            if (duplicate) throw new Error("UNIQUE constraint failed: hyperbounce_scores.name");
+            if (current) scores.set(userId, { ...current, name });
+            return { success: true };
+          }
+
           assert.match(sql, /ON CONFLICT\s*\(user_id\)/i);
           const [userId, name, score, submittedAt] = values;
           const current = scores.get(userId);
+          const duplicate = [...scores.values()].find(
+            (entry) => entry.userId !== userId && entry.name.toLowerCase() === name.toLowerCase()
+          );
+
+          if (duplicate) throw new Error("UNIQUE constraint failed: hyperbounce_scores.name");
           const keepsAccountName = /name\s*=\s*hyperbounce_scores\.name/i.test(sql);
           scores.set(userId, {
             userId,
@@ -119,6 +144,7 @@ test("leaderboard worker exposes CORS only to the configured game origin", async
   }), env);
 
   assert.equal(allowed.headers.get("Access-Control-Allow-Origin"), "https://raymunozeng.github.io");
+  assert.match(allowed.headers.get("Access-Control-Allow-Methods"), /PATCH/);
   assert.equal(untrusted.headers.get("Access-Control-Allow-Origin"), "");
 });
 
@@ -288,6 +314,96 @@ test("leaderboard worker uses conflict-safe storage for concurrent accounts", as
   ]);
 });
 
+test("leaderboard worker rejects duplicate names without regard to case", async () => {
+  const worker = await loadWorker();
+  const env = makeEnv(async (url, options = {}) => {
+    const token = options.headers.Authorization || "";
+    return new ResponseShim(JSON.stringify({ id: token }), { status: 200 });
+  });
+  const submit = (token, name) => worker.fetch(makeRequest(
+    "https://scores.example.dev/leaderboard",
+    {
+      method: "POST",
+      body: JSON.stringify({ name, score: 42 }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Origin: "https://raymunozeng.github.io",
+      },
+    }
+  ), env);
+
+  assert.equal((await submit("user-1", "Ray")).status, 200);
+  const duplicate = await submit("user-2", "rAy");
+  const body = await duplicate.json();
+
+  assert.equal(duplicate.status, 409);
+  assert.equal(body.code, "NAME_TAKEN");
+});
+
+test("leaderboard worker renames an account without losing its personal best", async () => {
+  const worker = await loadWorker();
+  const env = makeEnv(async () => new ResponseShim(
+    JSON.stringify({ id: "user-1" }),
+    { status: 200 }
+  ));
+  const headers = {
+    Authorization: "Bearer token-1",
+    "Content-Type": "application/json",
+    Origin: "https://raymunozeng.github.io",
+  };
+
+  await worker.fetch(makeRequest("https://scores.example.dev/leaderboard", {
+    method: "POST",
+    body: JSON.stringify({ name: "Ray", score: 72 }),
+    headers,
+  }), env);
+  const response = await worker.fetch(makeRequest("https://scores.example.dev/leaderboard", {
+    method: "PATCH",
+    body: JSON.stringify({ name: "Nova" }),
+    headers,
+  }), env);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.nameChanged, true);
+  assert.equal(body.playerName, "Nova");
+  assert.deepEqual(body.entries[0], {
+    name: "Nova",
+    score: 72,
+    submittedAt: body.entries[0].submittedAt,
+  });
+});
+
+test("leaderboard worker prompts for another name when a rename is taken", async () => {
+  const worker = await loadWorker();
+  const env = makeEnv(async (url, options = {}) => {
+    const token = options.headers.Authorization || "";
+    const id = token.endsWith("two") ? "user-2" : "user-1";
+    return new ResponseShim(JSON.stringify({ id }), { status: 200 });
+  });
+  const request = (method, token, name, score = 50) => worker.fetch(makeRequest(
+    "https://scores.example.dev/leaderboard",
+    {
+      method,
+      body: JSON.stringify({ name, score }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Origin: "https://raymunozeng.github.io",
+      },
+    }
+  ), env);
+
+  await request("POST", "user-one", "Ray");
+  await request("POST", "user-two", "Nova");
+  const response = await request("PATCH", "user-two", "RAY");
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.code, "NAME_TAKEN");
+});
+
 test("leaderboard worker is backed by D1 upserts rather than whole-board KV writes", () => {
   const source = fs.readFileSync(
     path.join(__dirname, "..", "workers", "leaderboard-worker.js"),
@@ -297,4 +413,13 @@ test("leaderboard worker is backed by D1 upserts rather than whole-board KV writ
   assert.match(source, /HYPERBOUNCE_DB/);
   assert.match(source, /ON CONFLICT\s*\(user_id\)/i);
   assert.doesNotMatch(source, /HYPERBOUNCE_SCORES|\.put\(\s*LEADERBOARD_KEY/);
+});
+
+test("leaderboard schema enforces case-insensitive unique names", () => {
+  const schema = fs.readFileSync(
+    path.join(__dirname, "..", "workers", "schema.sql"),
+    "utf8"
+  );
+
+  assert.match(schema, /CREATE UNIQUE INDEX[\s\S]*name COLLATE NOCASE/i);
 });

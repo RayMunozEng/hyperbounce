@@ -17,7 +17,7 @@ function isAllowedOrigin(request, env) {
 
 function corsHeaders(request, env) {
     const headers = {
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
         "Access-Control-Allow-Headers": "Authorization, Content-Type",
         "Cache-Control": "no-store",
         "Vary": "Origin"
@@ -99,6 +99,18 @@ async function readPersonalEntry(env, userId) {
         .first();
 }
 
+async function readNameOwner(env, name) {
+    return env.HYPERBOUNCE_DB
+        .prepare(`
+            SELECT user_id AS userId
+            FROM hyperbounce_scores
+            WHERE name = ?1 COLLATE NOCASE
+            LIMIT 1
+        `)
+        .bind(name)
+        .first();
+}
+
 async function upsertPersonalBest(env, entry) {
     await env.HYPERBOUNCE_DB
         .prepare(`
@@ -115,6 +127,28 @@ async function upsertPersonalBest(env, entry) {
         `)
         .bind(entry.userId, entry.name, entry.score, entry.submittedAt)
         .run();
+}
+
+async function renamePersonalEntry(env, userId, name) {
+    return env.HYPERBOUNCE_DB
+        .prepare(`
+            UPDATE hyperbounce_scores
+            SET name = ?1
+            WHERE user_id = ?2
+        `)
+        .bind(name, userId)
+        .run();
+}
+
+function isNameConflict(error) {
+    return /unique constraint|hyperbounce_scores\.name/i.test(String(error && error.message || error));
+}
+
+function nameTakenResponse(request, env) {
+    return jsonResponse(request, env, {
+        code: "NAME_TAKEN",
+        error: "Name already taken"
+    }, 409);
 }
 
 function jsonResponse(request, env, body, status = 200) {
@@ -180,7 +214,9 @@ export default {
             return jsonResponse(request, env, { error: "Not found" }, 404);
         }
 
-        if (request.method === "POST" && !isAllowedOrigin(request, env)) {
+        const isWriteRequest = request.method === "POST" || request.method === "PATCH";
+
+        if (isWriteRequest && !isAllowedOrigin(request, env)) {
             return jsonResponse(request, env, { error: "Origin not allowed" }, 403);
         }
 
@@ -206,7 +242,7 @@ export default {
             }));
         }
 
-        if (request.method !== "POST") {
+        if (!isWriteRequest) {
             return jsonResponse(request, env, { error: "Method not allowed" }, 405);
         }
 
@@ -231,11 +267,58 @@ export default {
             userId: String(authResult.user.id)
         };
 
+        if (request.method === "PATCH") {
+            if (!submitted.name) {
+                return jsonResponse(request, env, { error: "Invalid name" }, 400);
+            }
+
+            const personalEntry = await readPersonalEntry(env, submitted.userId);
+
+            if (!personalEntry) {
+                return jsonResponse(request, env, {
+                    code: "PLAYER_NAME_REQUIRED",
+                    error: "Create a leaderboard name first"
+                }, 404);
+            }
+
+            const nameOwner = await readNameOwner(env, submitted.name);
+
+            if (nameOwner && String(nameOwner.userId) !== submitted.userId) {
+                return nameTakenResponse(request, env);
+            }
+
+            try {
+                await renamePersonalEntry(env, submitted.userId, submitted.name);
+            } catch (error) {
+                if (isNameConflict(error)) return nameTakenResponse(request, env);
+                throw error;
+            }
+
+            const rankedEntries = await readEntries(env);
+            return jsonResponse(request, env, payload(rankedEntries, {
+                nameChanged: true,
+                playerName: submitted.name
+            }));
+        }
+
         if (!submitted.name || submitted.score <= 0) {
             return jsonResponse(request, env, { error: "Invalid score" }, 400);
         }
 
-        await upsertPersonalBest(env, submitted);
+        const existingEntry = await readPersonalEntry(env, submitted.userId);
+
+        if (!existingEntry) {
+            const nameOwner = await readNameOwner(env, submitted.name);
+            if (nameOwner) return nameTakenResponse(request, env);
+        }
+
+        try {
+            await upsertPersonalBest(env, submitted);
+        } catch (error) {
+            if (isNameConflict(error)) return nameTakenResponse(request, env);
+            throw error;
+        }
+
         const personalEntry = await readPersonalEntry(env, submitted.userId);
         const rankedEntries = await readEntries(env);
         const rankIndex = rankedEntries.findIndex((entry) => entry.userId === submitted.userId);
