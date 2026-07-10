@@ -93,7 +93,7 @@ async function upsertPersonalBest(env, entry) {
             INSERT INTO hyperbounce_scores (user_id, name, score, submitted_at)
             VALUES (?1, ?2, ?3, ?4)
             ON CONFLICT(user_id) DO UPDATE SET
-                name = excluded.name,
+                name = hyperbounce_scores.name,
                 score = MAX(hyperbounce_scores.score, excluded.score),
                 submitted_at = CASE
                     WHEN excluded.score > hyperbounce_scores.score

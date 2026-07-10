@@ -254,6 +254,7 @@ export class Hud {
 
     setAuthState({ isConfigured = false, isSignedIn = false, email = "", message = "" } = {}) {
         const resolvedMessage = message || "Sign in to save top scores.";
+        const showSignInOptions = isConfigured && !isSignedIn;
 
         this.setVisible(this.elements.authPanel, isConfigured);
 
@@ -265,12 +266,15 @@ export class Hud {
         }
         if (this.elements.authEmail) {
             this.elements.authEmail.disabled = !isConfigured || isSignedIn;
+            this.setVisible(this.elements.authEmail, showSignInOptions);
         }
         if (this.elements.authEmailButton) {
             this.elements.authEmailButton.disabled = !isConfigured || isSignedIn;
+            this.setVisible(this.elements.authEmailButton, showSignInOptions);
         }
         if (this.elements.authGoogleButton) {
             this.elements.authGoogleButton.disabled = !isConfigured || isSignedIn;
+            this.setVisible(this.elements.authGoogleButton, showSignInOptions);
         }
         if (this.elements.authSignOutButton) {
             this.elements.authSignOutButton.disabled = !isSignedIn;

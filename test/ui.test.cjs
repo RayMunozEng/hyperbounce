@@ -444,6 +444,15 @@ test("HUD renders auth state and binds login controls", () => {
   });
   hud.setAuthState({
     isConfigured: true,
+    isSignedIn: false,
+  });
+
+  assert.equal(doc.elements["auth-google-btn"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["auth-email"].classList.contains("hidden"), false);
+  assert.equal(doc.elements["auth-email-btn"].classList.contains("hidden"), false);
+
+  hud.setAuthState({
+    isConfigured: true,
     isSignedIn: true,
     email: "ray@example.com",
     message: "Signed in",
@@ -455,6 +464,9 @@ test("HUD renders auth state and binds login controls", () => {
 
   assert.deepEqual(calls, ["google", "email", "out"]);
   assert.equal(doc.elements["auth-user"].textContent, "ray@example.com");
+  assert.equal(doc.elements["auth-google-btn"].classList.contains("hidden"), true);
+  assert.equal(doc.elements["auth-email"].classList.contains("hidden"), true);
+  assert.equal(doc.elements["auth-email-btn"].classList.contains("hidden"), true);
   assert.equal(doc.elements["auth-signout-btn"].classList.contains("hidden"), false);
   assert.equal(doc.elements["auth-message"].textContent, "Signed in");
 });

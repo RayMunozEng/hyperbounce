@@ -72,9 +72,10 @@ function makeEnv(fetchImpl) {
           assert.match(sql, /ON CONFLICT\s*\(user_id\)/i);
           const [userId, name, score, submittedAt] = values;
           const current = scores.get(userId);
+          const keepsAccountName = /name\s*=\s*hyperbounce_scores\.name/i.test(sql);
           scores.set(userId, {
             userId,
-            name,
+            name: current && keepsAccountName ? current.name : name,
             score: current ? Math.max(current.score, score) : score,
             submittedAt: current && current.score >= score ? current.submittedAt : submittedAt,
           });
@@ -186,7 +187,7 @@ test("leaderboard worker verifies Supabase bearer tokens before saving scores", 
   assert.equal(authRequests[0].options.headers.apikey, "anon");
 });
 
-test("leaderboard worker keeps one private personal best per authenticated account", async () => {
+test("leaderboard worker keeps one private name and personal best per authenticated account", async () => {
   const worker = await loadWorker();
   const env = makeEnv(async (url, options = {}) => {
     const token = options.headers.Authorization || "";
@@ -208,8 +209,8 @@ test("leaderboard worker keeps one private personal best per authenticated accou
   }
 
   await submit("user-one", "Ray", 42);
-  await submit("user-one", "Ray", 60);
-  await submit("user-one", "Ray", 10);
+  await submit("user-one", "Different Name", 60);
+  await submit("user-one", "Another Name", 10);
   const result = await submit("user-two", "Nova", 50);
 
   assert.deepEqual(result.entries.map(({ name, score }) => ({ name, score })), [
