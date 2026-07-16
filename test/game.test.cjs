@@ -1201,6 +1201,108 @@ test("game keeps a sign-in event authoritative over a stale guest startup respon
   assert.equal(leaderboardLoads, 1);
 });
 
+test("game ignores a stale public leaderboard response after authenticated data loads", async () => {
+  const { default: Game } = loadSourceModule("src/game.js");
+  const pendingLoads = [];
+  const renderedNames = [];
+  const game = {
+    leaderboardLoadRevision: 0,
+    leaderboardEntries: [],
+    leaderboardName: "",
+    overallHighScore: 0,
+    lastCelebratedOverallScore: 0,
+    isSignedIn: true,
+    leaderboardClient: {
+      isEnabled() {
+        return true;
+      },
+      load() {
+        return new Promise((resolve) => pendingLoads.push(resolve));
+      },
+    },
+    hud: {
+      setLeaderboardAvailability() {},
+      setLeaderboardProfile({ playerName }) {
+        renderedNames.push(playerName);
+      },
+      setLeaderboard() {},
+    },
+  };
+
+  Object.setPrototypeOf(game, Game.prototype);
+  const publicLoad = Game.prototype.loadLeaderboard.call(game);
+  const authenticatedLoad = Game.prototype.loadLeaderboard.call(game);
+
+  pendingLoads[1]({
+    entries: [{ name: "Ray", score: 72 }],
+    overallHighScore: 72,
+    playerName: "Ray",
+  });
+  await authenticatedLoad;
+  pendingLoads[0]({
+    entries: [{ name: "Ray", score: 72 }],
+    overallHighScore: 72,
+    playerName: "",
+  });
+  await publicLoad;
+
+  assert.equal(game.leaderboardName, "Ray");
+  assert.deepEqual(renderedNames, ["Ray"]);
+});
+
+test("game refreshes a missing signed-in name and submits the finished score", async () => {
+  const { default: Game } = loadSourceModule("src/game.js");
+  const calls = [];
+  const game = {
+    score: 88,
+    highScore: 20,
+    overallHighScore: 72,
+    lastCelebratedOverallScore: 72,
+    leaderboardName: "",
+    isSignedIn: true,
+    localStorageName: "hyperbouncescore",
+    musicHighScoreRate: 1.12,
+    musicDarkRate: 0.92,
+    musicShiftSeconds: 0.45,
+    storage: { setItem() {} },
+    isAllTimeRecord() {
+      return true;
+    },
+    canSubmitLeaderboardScore() {
+      return true;
+    },
+    loadLeaderboard() {
+      calls.push(["refresh"]);
+      this.leaderboardName = "Ray";
+      return Promise.resolve();
+    },
+    submitLeaderboardScore(event, name, score) {
+      calls.push(["submit", name, score]);
+      return Promise.resolve();
+    },
+    playHighScoreCelebration() {},
+    bgm: { shiftRate() {} },
+    hud: {
+      showGameOver(args) {
+        calls.push(["gameOverPrompt", args.qualifiesForLeaderboard]);
+      },
+      showLeaderboardPrompt(isVisible) {
+        calls.push(["namePrompt", isVisible]);
+      },
+    },
+  };
+
+  Object.setPrototypeOf(game, Game.prototype);
+  await Game.prototype.end.call(game);
+
+  assert.deepEqual(calls, [
+    ["gameOverPrompt", false],
+    ["refresh"],
+    ["namePrompt", false],
+    ["submit", "Ray", 88],
+  ]);
+});
+
 test("game resolves personal and overall best scores from production state", () => {
   const {
     resolveInitialHighScore,

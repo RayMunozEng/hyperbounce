@@ -121,6 +121,8 @@ export default class Game {
         this.lastCelebratedOverallScore = 0;
         this.leaderboardEntries = [];
         this.leaderboardName = "";
+        this.leaderboardLoadRevision = 0;
+        this.leaderboardLoadPromise = Promise.resolve();
         this.isSignedIn = false;
         this.score = 0;
         this.multiplier = 1;
@@ -474,6 +476,7 @@ export default class Game {
     }
 
     end() {
+        const finishedScore = this.score;
         const isNewHighScore = this.score > this.highScore;
         const isAllTimeHighScore = this.isAllTimeRecord ?
             this.isAllTimeRecord(this.score) :
@@ -482,6 +485,7 @@ export default class Game {
             this.canSubmitLeaderboardScore(this.score) :
             false;
         const hasLeaderboardName = Boolean(this.leaderboardName);
+        const shouldRefreshLeaderboardName = qualifiesForLeaderboard && this.isSignedIn && !hasLeaderboardName;
 
         if (isNewHighScore) {
             this.highScore = this.score;
@@ -515,11 +519,22 @@ export default class Game {
             overallHighScore: this.overallHighScore,
             isNewHighScore,
             isAllTimeHighScore,
-            qualifiesForLeaderboard: qualifiesForLeaderboard && !hasLeaderboardName
+            qualifiesForLeaderboard: qualifiesForLeaderboard && !hasLeaderboardName && !shouldRefreshLeaderboardName
         });
         if (qualifiesForLeaderboard && hasLeaderboardName) {
-            this.submitLeaderboardScore(null, this.leaderboardName);
+            return this.submitLeaderboardScore(null, this.leaderboardName, finishedScore);
         }
+        if (!shouldRefreshLeaderboardName) return undefined;
+
+        return this.loadLeaderboard().then(() => {
+            if (this.leaderboardName) {
+                this.hud.showLeaderboardPrompt(false);
+                return this.submitLeaderboardScore(null, this.leaderboardName, finishedScore);
+            }
+
+            this.hud.showLeaderboardPrompt(true);
+            return undefined;
+        });
     }
 
     toggleSound() {
@@ -707,26 +722,37 @@ export default class Game {
     }
 
     loadLeaderboard() {
+        const revision = (Number(this.leaderboardLoadRevision) || 0) + 1;
+        this.leaderboardLoadRevision = revision;
+
         if (!this.leaderboardClient || !this.leaderboardClient.isEnabled || !this.leaderboardClient.isEnabled()) {
             this.leaderboardEntries = [];
             this.overallHighScore = 0;
             if (this.hud.setLeaderboardAvailability) this.hud.setLeaderboardAvailability(false);
-            return Promise.resolve();
+            this.leaderboardLoadPromise = Promise.resolve();
+            return this.leaderboardLoadPromise;
         }
 
         if (this.hud.setLeaderboardAvailability) this.hud.setLeaderboardAvailability(true);
 
-        return this.leaderboardClient.load()
+        const loadPromise = this.leaderboardClient.load()
             .then((leaderboard) => {
+                if (revision !== this.leaderboardLoadRevision) return this.leaderboardLoadPromise;
                 this.applyLeaderboard(leaderboard);
+                return leaderboard;
             })
             .catch(() => {
+                if (revision !== this.leaderboardLoadRevision) return this.leaderboardLoadPromise;
                 this.hud.setLeaderboard({
                     entries: [],
                     overallHighScore: 0,
                     emptyMessage: "Leaderboard unavailable."
                 });
+                return undefined;
             });
+
+        this.leaderboardLoadPromise = loadPromise;
+        return loadPromise;
     }
 
     applyLeaderboard({ entries = [], overallHighScore = 0, playerName = "" } = {}) {
@@ -942,7 +968,7 @@ export default class Game {
             });
     }
 
-    submitLeaderboardScore(event, savedName = "") {
+    submitLeaderboardScore(event, savedName = "", score = this.score) {
         if (event && event.preventDefault) event.preventDefault();
         if (!this.leaderboardClient || !this.leaderboardClient.isEnabled || !this.leaderboardClient.isEnabled()) {
             return Promise.resolve();
@@ -972,7 +998,7 @@ export default class Game {
 
         return this.leaderboardClient.submit({
                 name,
-                score: this.score
+                score
             })
             .then((result) => {
                 this.applyLeaderboard(result);
